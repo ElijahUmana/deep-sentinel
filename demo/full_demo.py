@@ -256,18 +256,20 @@ async def demo():
     step(2, 7, "UNDERSTAND — Analyzing codebase architecture via Macroscope...")
 
     # Query Macroscope for security surface area (triggers webhook, polls for result)
+    # Macroscope API is async -- we trigger, poll briefly, use results if ready
     security_surface = await macroscope.get_security_surface(
         f"Security scanner analyzing {owner}/{repo}"
     )
     if security_surface.get("macroscope_analysis"):
-        print(f"  [Macroscope] Security surface analysis:")
+        print(f"  [Macroscope] Security surface analysis (LIVE from Macroscope):")
         for line in security_surface["macroscope_analysis"].split("\n")[:8]:
             if line.strip():
                 print(f"    {line.strip()}")
     else:
-        print(f"  [Macroscope] Surface analysis: {security_surface.get('note', 'pending')}")
+        print(f"  [Macroscope] Surface query triggered: {security_surface.get('note', 'pending')}")
 
     # Get architectural context per file (uses Macroscope when connected, falls back to heuristics)
+    # Use short poll timeout for demo speed -- real deployment uses longer waits
     for f in all_files:
         ctx = await macroscope.get_module_context(f["path"])
         ms_tag = " (Macroscope)" if ctx.get("macroscope_answer") else " (heuristic)"
@@ -277,7 +279,7 @@ async def demo():
     file_paths = [f["path"] for f in all_files]
     dep_risk = await macroscope.analyze_dependency_risk(file_paths)
     if dep_risk.get("risk_ranking") and isinstance(dep_risk["risk_ranking"], str):
-        print(f"\n  [Macroscope] Dependency blast radius analysis:")
+        print(f"\n  [Macroscope] Dependency blast radius analysis (LIVE):")
         for line in dep_risk["risk_ranking"].split("\n")[:6]:
             if line.strip():
                 print(f"    {line.strip()}")

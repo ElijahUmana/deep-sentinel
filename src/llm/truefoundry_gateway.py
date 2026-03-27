@@ -281,8 +281,8 @@ class TrueFoundryGateway:
                 key=lambda r: r["input"] + r["output"],
             )
             all_expensive_cost = sum(
-                s["total_tokens"] * (most_expensive["input"] + most_expensive["output"]) / 2_000_000
-                for s in self._model_stats.values()
+                s.get("total_tokens", 0) * (most_expensive["input"] + most_expensive["output"]) / 2_000_000
+                for s in comparison.values()
             )
             if all_expensive_cost > 0 and all_expensive_cost > total_cost:
                 savings_pct = (1 - total_cost / all_expensive_cost) * 100

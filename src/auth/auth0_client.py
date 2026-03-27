@@ -227,7 +227,7 @@ class Auth0Client:
                     "client_id": self.client_id,
                     "client_secret": self.client_secret,
                     "login_hint": login_hint,
-                    "binding_message": f"DeepSentinel: {action} on {resource}",
+                    "binding_message": f"DS: {action[:30]} on {resource[:25]}"[:64],
                     "scope": "openid",
                     "audience": self.audience,
                 },

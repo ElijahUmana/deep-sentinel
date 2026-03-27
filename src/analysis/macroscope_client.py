@@ -140,7 +140,7 @@ class MacroscopeClient:
             f"What module is {file_path} in? What services depend on it? "
             f"How critical is this file to the system? What data flows through it?"
         )
-        answer = await self.query_and_wait(question, max_wait=10.0)
+        answer = await self.query_and_wait(question, max_wait=5.0)
 
         if answer:
             # Merge Macroscope intelligence with static analysis
@@ -211,7 +211,7 @@ class MacroscopeClient:
             f"{paths_str}. For each file, list what depends on it and rate its "
             f"criticality as HIGH/MEDIUM/LOW. Focus on security impact."
         )
-        answer = await self.query_and_wait(question, max_wait=12.0)
+        answer = await self.query_and_wait(question, max_wait=5.0)
 
         if answer:
             return {
