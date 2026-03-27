@@ -4,16 +4,21 @@ Implements all four secure agentic application pillars:
 1. User Authentication (device flow for CLI)
 2. Token Vault (zero standing privileges for GitHub/Slack access)
 3. Async Authorization / CIBA (human-in-the-loop for sensitive actions)
-4. Fine-Grained Authorization (agents access only what they need)
+4. Fine-Grained Authorization via OpenFGA (agents access only what they need)
+
+Uses the official auth0-ai Python SDK and openfga-sdk for all operations.
 """
 import asyncio
 import os
 import time
 import httpx
 
+from auth0_ai.authorizers.fga_authorizer import FGAAuthorizer, FGAAuthorizerParams
+from openfga_sdk.client import ClientCheckRequest
+
 
 class Auth0Client:
-    """Full Auth0 for AI Agents integration."""
+    """Full Auth0 for AI Agents integration — 4 pillars."""
 
     def __init__(self):
         self.domain = os.environ.get("AUTH0_DOMAIN", "")
@@ -24,8 +29,28 @@ class Auth0Client:
         self.user_id = None
         self.connected = bool(self.domain and self.client_id)
 
+        # FGA configuration (from env or defaults)
+        self.fga_params: FGAAuthorizerParams = {
+            "api_url": os.environ.get("FGA_API_URL", "https://api.us1.fga.dev"),
+            "store_id": os.environ.get("FGA_STORE_ID", ""),
+            "credentials": {
+                "method": "client_credentials",
+                "config": {
+                    "api_issuer": os.environ.get("FGA_API_TOKEN_ISSUER", "auth.fga.dev"),
+                    "api_audience": os.environ.get("FGA_API_AUDIENCE", "https://api.us1.fga.dev/"),
+                    "client_id": os.environ.get("FGA_CLIENT_ID", self.client_id),
+                    "client_secret": os.environ.get("FGA_CLIENT_SECRET", self.client_secret),
+                },
+            },
+        }
+        self.fga_connected = bool(os.environ.get("FGA_STORE_ID"))
+
         if self.connected:
             print("[Auth0] Configured — secure agent identity active")
+            if self.fga_connected:
+                print("[Auth0 FGA] OpenFGA store connected — fine-grained authorization enabled")
+            else:
+                print("[Auth0 FGA] No FGA_STORE_ID — FGA checks will run in permissive mode")
         else:
             print("[Auth0] No credentials, running in direct-token mode")
 
@@ -222,7 +247,7 @@ class Auth0Client:
         return False
 
     # ===========================
-    # 4. FINE-GRAINED AUTH
+    # 4. FINE-GRAINED AUTH (OpenFGA)
     # ===========================
 
     def get_required_scopes(self, action: str) -> list:
@@ -236,6 +261,121 @@ class Auth0Client:
             "rotate_credential": ["admin:org", "repo:admin"],
         }
         return scope_map.get(action, [])
+
+    async def fga_check(self, user: str, relation: str, object_type: str, object_id: str) -> bool:
+        """
+        Check fine-grained authorization via Auth0 FGA (OpenFGA).
+
+        Uses the auth0-ai SDK's FGAAuthorizer to verify whether a user
+        has a specific relation to an object. Example relations:
+          - user:alice  can_view  repo:demo-vulnerable-app
+          - user:alice  can_triage  finding:CWE-89-payment.py
+
+        Args:
+            user: The user identifier (e.g. "user:alice")
+            relation: The relation to check (e.g. "can_view", "can_triage", "owner")
+            object_type: The object type (e.g. "repo", "finding", "scan")
+            object_id: The object identifier (e.g. "demo-vulnerable-app")
+
+        Returns:
+            True if the user has the specified relation, False otherwise.
+        """
+        fga_object = f"{object_type}:{object_id}"
+
+        if not self.fga_connected:
+            # Permissive mode when FGA is not configured — log the check intent
+            print(f"[Auth0 FGA] Authorization check (permissive): {user} {relation} {fga_object} -> ALLOWED")
+            return True
+
+        try:
+            # Use the auth0-ai SDK's FGAAuthorizer.authorize() static method
+            # which creates a client, runs the check, and cleans up
+            allowed = await FGAAuthorizer.authorize(
+                options={
+                    "build_query": lambda _ctx: ClientCheckRequest(
+                        user=user,
+                        relation=relation,
+                        object=fga_object,
+                    ),
+                },
+                params=self.fga_params,
+            )
+            status = "ALLOWED" if allowed else "DENIED"
+            print(f"[Auth0 FGA] Authorization check: {user} {relation} {fga_object} -> {status}")
+            return allowed
+        except Exception as e:
+            # FGA service unavailable — fail open with warning for hackathon demo
+            print(f"[Auth0 FGA] Check failed ({e}), defaulting to ALLOWED")
+            return True
+
+    async def fga_check_repo_findings(self, user_id: str, owner: str, repo: str) -> bool:
+        """
+        Check if a user is authorized to view security findings for a repository.
+        This is the primary FGA gate in the scan pipeline — the agent checks
+        permission BEFORE revealing vulnerability details.
+        """
+        user = f"user:{user_id}" if not user_id.startswith("user:") else user_id
+        repo_obj = f"{owner}/{repo}"
+        return await self.fga_check(user, "can_view", "repo_findings", repo_obj)
+
+    async def fga_check_triage(self, user_id: str, finding_id: str) -> bool:
+        """Check if user can triage (acknowledge/dismiss) a specific finding."""
+        user = f"user:{user_id}" if not user_id.startswith("user:") else user_id
+        return await self.fga_check(user, "can_triage", "finding", finding_id)
+
+    # ===========================
+    # DEMO HELPERS
+    # ===========================
+
+    async def demonstrate_device_flow(self) -> dict:
+        """
+        Demonstrate the device authorization flow for the demo.
+        In a real deployment this blocks until the user authenticates;
+        for the demo we show the flow steps and use the configured credentials.
+        """
+        print("\n[Auth0 Device Flow] Initiating device authorization...")
+
+        if not self.connected:
+            print("[Auth0 Device Flow] Auth0 not configured — showing flow structure:")
+            print("  Step 1: POST /oauth/device/code -> get user_code + verification_uri")
+            print("  Step 2: User visits https://<domain>/activate and enters code")
+            print("  Step 3: Poll POST /oauth/token with device_code until authorized")
+            print("  Step 4: Receive access_token + refresh_token")
+            print("[Auth0 Device Flow] Using direct-token mode for demo")
+            self.user_id = "demo|device-flow-user"
+            return {
+                "status": "demo_mode",
+                "user_id": self.user_id,
+                "flow": "device_authorization",
+                "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+            }
+
+        # Real device flow — request the code
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"https://{self.domain}/oauth/device/code",
+                data={
+                    "client_id": self.client_id,
+                    "scope": "openid profile email offline_access",
+                    "audience": self.audience,
+                },
+            )
+            data = resp.json()
+            verification_url = data.get("verification_uri_complete", data.get("verification_uri", ""))
+            user_code = data.get("user_code", "")
+
+            print(f"  Verification URL: {verification_url}")
+            print(f"  User Code: {user_code}")
+            print("  (In production, user authenticates here; demo continues with client credentials)")
+
+            # For demo, use client credentials instead of blocking
+            self.user_id = f"auth0|device-{self.client_id[:8]}"
+            return {
+                "status": "demonstrated",
+                "user_id": self.user_id,
+                "verification_uri": verification_url,
+                "user_code": user_code,
+            }
 
     async def close(self):
         pass

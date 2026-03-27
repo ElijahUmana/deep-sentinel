@@ -13,7 +13,8 @@ class MacroscopeClient:
     def __init__(self, api_key: str = None, workspace_id: str = None):
         self.api_key = api_key or os.environ.get("MACROSCOPE_API_KEY", "")
         self.workspace_id = workspace_id or os.environ.get("MACROSCOPE_WORKSPACE_ID", "")
-        self.base_url = "https://macrohook.macroscope.com/api/v1"
+        self.workspace_type = os.environ.get("MACROSCOPE_WORKSPACE_TYPE", "github_user")
+        self.base_url = "https://hooks.macroscope.com/api/v1"
         self.connected = bool(self.api_key and self.workspace_id)
 
         if self.connected:
@@ -29,7 +30,7 @@ class MacroscopeClient:
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 response = await client.post(
-                    f"{self.base_url}/workspaces/{self.workspace_id}/query-agent-webhook-trigger",
+                    f"{self.base_url}/workspaces/{self.workspace_type}/{self.workspace_id}/query-agent-webhook-trigger",
                     headers={
                         "Content-Type": "application/json",
                         "X-Webhook-Secret": self.api_key,

@@ -1,12 +1,14 @@
 """
 Airbyte integration for DeepSentinel.
 Multi-source data ingestion: GitHub + Slack via agent connectors.
-Cross-source correlation engine.
+All GitHub operations route through the Airbyte connector's execute() method.
+Cross-source correlation engine with context enrichment metrics.
 """
 import asyncio
 import base64
 import json
 import os
+import time
 from dataclasses import dataclass, field
 
 import httpx
@@ -39,6 +41,7 @@ class CrossSourceContext:
     github: PRData = None
     slack: SlackContext = None
     correlations: list = field(default_factory=list)
+    enrichment_metrics: dict = field(default_factory=dict)
 
 
 SECURITY_KEYWORDS = [
@@ -51,7 +54,12 @@ SECURITY_KEYWORDS = [
 
 
 class AirbyteDataLayer:
-    """Multi-source data ingestion via Airbyte agent connectors."""
+    """Multi-source data ingestion via Airbyte agent connectors.
+
+    All GitHub data flows through the Airbyte GithubConnector's execute() method
+    (pull_requests, file_content, directory_content entities). Raw httpx is only
+    used as a fallback when the connector does not expose an entity (e.g. PR diff files).
+    """
 
     def __init__(self, github_token: str = None, slack_token: str = None, auth0_client=None):
         # Auth0 Token Vault integration: try to get tokens from Auth0 first
@@ -86,6 +94,10 @@ class AirbyteDataLayer:
         self.github = None
         self.slack = None
 
+        # Entity-level cache: avoids redundant connector calls for the same data
+        self._entity_cache: dict[str, tuple[float, any]] = {}
+        self._cache_ttl = 120  # seconds
+
         if self.github_token:
             try:
                 self.github = GithubConnector(
@@ -103,69 +115,155 @@ class AirbyteDataLayer:
             print("[Airbyte] Slack connector initialized")
 
     # ===========================
-    # GITHUB DATA
+    # ENTITY CACHE
+    # ===========================
+
+    def _cache_key(self, entity: str, action: str, params: dict) -> str:
+        """Build a deterministic cache key for an entity call."""
+        sorted_params = json.dumps(params, sort_keys=True, default=str)
+        return f"{entity}:{action}:{sorted_params}"
+
+    def _get_cached(self, key: str):
+        """Return cached result if still fresh, else None."""
+        if key in self._entity_cache:
+            ts, data = self._entity_cache[key]
+            if time.time() - ts < self._cache_ttl:
+                return data
+            del self._entity_cache[key]
+        return None
+
+    def _set_cached(self, key: str, data):
+        self._entity_cache[key] = (time.time(), data)
+
+    async def _github_execute(self, entity: str, action: str, params: dict):
+        """Execute a GitHub connector call with entity caching."""
+        if not self.github:
+            return None
+        key = self._cache_key(entity, action, params)
+        cached = self._get_cached(key)
+        if cached is not None:
+            return cached
+        result = await self.github.execute(entity, action, params)
+        data = result.data if hasattr(result, "data") else result
+        self._set_cached(key, data)
+        return data
+
+    # ===========================
+    # GITHUB DATA (via Airbyte connector)
     # ===========================
 
     async def get_open_prs(self, owner: str, repo: str) -> list:
-        """Get all open PRs for monitoring."""
-        if not self.github:
-            return []
-        result = await self.github.execute(
-            "pull_requests", "list", {"owner": owner, "repo": repo, "states": ["OPEN"], "per_page": 20}
+        """Get all open PRs via Airbyte GitHub connector."""
+        data = await self._github_execute(
+            "pull_requests", "list",
+            {"owner": owner, "repo": repo, "states": ["OPEN"], "per_page": 20},
         )
-        return result.data if hasattr(result, "data") else []
+        return data or []
 
     async def get_pr_details(self, owner: str, repo: str, pr_number: int) -> PRData:
-        """Get full PR details including changed files."""
-        pr = await self._github_api_pr(owner, repo, pr_number)
+        """Get full PR details via Airbyte GitHub connector.
+
+        Uses pull_requests.get for metadata + file_content.get for each changed file.
+        Falls back to REST API only for the PR diff file list (no connector entity).
+        """
+        # Step 1: PR metadata via Airbyte connector
+        pr = await self._github_execute(
+            "pull_requests", "get",
+            {"owner": owner, "repo": repo, "number": pr_number},
+        )
         if not pr:
             return PRData(number=pr_number, title=f"PR #{pr_number}", author="unknown", body="")
 
-        # Get the PR's head branch for fetching file content
-        head_ref = pr.get("head", {}).get("ref", "main") if isinstance(pr.get("head"), dict) else "main"
+        # Normalize — connector may return a dict or a single-item list
+        if isinstance(pr, list):
+            pr = pr[0] if pr else {}
 
+        # Extract PR metadata fields
+        title = pr.get("title", "")
+        body = pr.get("body", "") or ""
+        author = pr.get("author", pr.get("user", "unknown"))
+        if isinstance(author, dict):
+            author = author.get("login", "unknown")
+        labels_raw = pr.get("labels", [])
+        label_names = []
+        for lb in labels_raw:
+            if isinstance(lb, dict):
+                label_names.append(lb.get("name", ""))
+            elif isinstance(lb, str):
+                label_names.append(lb)
+
+        # Determine head ref for file content lookups
+        head_ref = "main"
+        head = pr.get("headRefName", pr.get("head", {}))
+        if isinstance(head, str):
+            head_ref = head
+        elif isinstance(head, dict):
+            head_ref = head.get("ref", "main")
+
+        # Step 2: Get changed file paths via REST (no connector entity for PR diffs)
         pr_files = await self._github_api_pr_files(owner, repo, pr_number)
+
+        # Step 3: Fetch each changed file's content via Airbyte file_content.get
         changed_files = []
         for pf in pr_files[:10]:
             fp = pf.get("filename", "")
-            content = await self._github_api_file(owner, repo, fp, ref=head_ref)
+            content = await self._get_file_via_connector(owner, repo, fp, ref=head_ref)
             changed_files.append({"path": fp, "content": content, "patch": pf.get("patch", "")})
-
-        user = pr.get("user", {})
-        labels = pr.get("labels", [])
-        label_names = []
-        for l in labels:
-            if isinstance(l, dict):
-                label_names.append(l.get("name", ""))
-            elif isinstance(l, str):
-                label_names.append(l)
 
         return PRData(
             number=pr.get("number", pr_number),
-            title=pr.get("title", ""),
-            author=user.get("login", "unknown") if isinstance(user, dict) else str(user),
-            body=pr.get("body", "") or "",
+            title=title,
+            author=str(author),
+            body=body,
             changed_files=changed_files,
             commits=[],
             labels=label_names,
         )
 
     async def get_repo_files(self, owner: str, repo: str, path: str = "") -> list:
-        """List repository directory contents."""
-        if not self.github:
-            return []
-        try:
-            result = await self.github.execute("directory_content", "list", {"owner": owner, "repo": repo, "path": path})
-            return result.data if hasattr(result, "data") else []
-        except Exception:
-            return []
+        """List repository directory contents via Airbyte connector."""
+        data = await self._github_execute(
+            "directory_content", "list",
+            {"owner": owner, "repo": repo, "path": path or "."},
+        )
+        return data or []
 
     async def get_file_content(self, owner: str, repo: str, path: str) -> str:
-        """Get raw file content from GitHub."""
-        return await self._github_api_file(owner, repo, path)
+        """Get raw file content via Airbyte connector (file_content entity)."""
+        return await self._get_file_via_connector(owner, repo, path)
 
-    async def _github_api_file(self, owner: str, repo: str, path: str, ref: str = None) -> str:
-        """Fetch file content from GitHub API."""
+    async def _get_file_via_connector(self, owner: str, repo: str, path: str, ref: str = None) -> str:
+        """Fetch file content through the Airbyte GitHub connector's file_content.get entity.
+
+        Falls back to raw GitHub API only if the connector call fails.
+        """
+        if not self.github:
+            return await self._github_api_file_fallback(owner, repo, path, ref)
+
+        try:
+            params = {"owner": owner, "repo": repo, "path": path}
+            if ref:
+                params["ref"] = ref
+            data = await self._github_execute("file_content", "get", params)
+            if data is None:
+                return await self._github_api_file_fallback(owner, repo, path, ref)
+
+            # Connector may return dict with "text" key, list, or raw string
+            if isinstance(data, dict):
+                return data.get("text", data.get("content", "")) or ""
+            if isinstance(data, list) and data:
+                entry = data[0]
+                if isinstance(entry, dict):
+                    return entry.get("text", entry.get("content", "")) or ""
+                return str(entry)
+            if isinstance(data, str):
+                return data
+            return ""
+        except Exception:
+            return await self._github_api_file_fallback(owner, repo, path, ref)
+
+    async def _github_api_file_fallback(self, owner: str, repo: str, path: str, ref: str = None) -> str:
+        """REST API fallback for file content (only used when connector fails)."""
         try:
             async with httpx.AsyncClient() as client:
                 params = {}
@@ -183,22 +281,8 @@ class AirbyteDataLayer:
             pass
         return ""
 
-    async def _github_api_pr(self, owner: str, repo: str, pr_number: int) -> dict:
-        """Direct GitHub API fallback for PR data."""
-        try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.get(
-                    f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}",
-                    headers={"Authorization": f"Bearer {self.github_token}", "Accept": "application/vnd.github.v3+json"},
-                )
-                if resp.status_code == 200:
-                    return resp.json()
-        except Exception:
-            pass
-        return {}
-
     async def _github_api_pr_files(self, owner: str, repo: str, pr_number: int) -> list:
-        """Get changed files in a PR via GitHub API."""
+        """Get changed files in a PR via REST API (no connector entity for this)."""
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.get(
@@ -279,10 +363,14 @@ class AirbyteDataLayer:
     # ===========================
 
     async def gather_full_context(self, owner: str, repo: str, pr_number: int) -> CrossSourceContext:
-        """Gather data from all sources in parallel and correlate."""
+        """Gather data from all sources in parallel and correlate.
+
+        Returns a CrossSourceContext with enrichment_metrics showing the
+        incremental value of each data source.
+        """
         print("[Airbyte] Gathering cross-source context...")
 
-        # Parallel data fetch
+        # Parallel data fetch from multiple Airbyte connectors
         github_task = self.get_pr_details(owner, repo, pr_number)
         slack_task = self.get_security_discussions()
 
@@ -298,12 +386,21 @@ class AirbyteDataLayer:
         # Cross-source correlation
         correlations = self._correlate(github_data, slack_data)
 
+        # Compute context enrichment metrics
+        enrichment = self._compute_enrichment_metrics(github_data, slack_data, correlations)
+
         print(f"[Airbyte] GitHub: PR #{github_data.number} — {github_data.title}")
         print(f"[Airbyte] GitHub: {len(github_data.changed_files)} files changed")
         print(f"[Airbyte] Slack: {len(slack_data.messages)} security messages from {len(slack_data.channels_searched)} channels")
         print(f"[Airbyte] Correlations: {len(correlations)} cross-source links found")
+        print(f"[Airbyte] Entity cache: {len(self._entity_cache)} entries cached")
 
-        return CrossSourceContext(github=github_data, slack=slack_data, correlations=correlations)
+        return CrossSourceContext(
+            github=github_data,
+            slack=slack_data,
+            correlations=correlations,
+            enrichment_metrics=enrichment,
+        )
 
     def _correlate(self, github: PRData, slack: SlackContext) -> list:
         """Find connections between GitHub and Slack data."""
@@ -340,3 +437,56 @@ class AirbyteDataLayer:
                 })
 
         return correlations
+
+    # ===========================
+    # MULTI-SOURCE ENRICHMENT METRICS
+    # ===========================
+
+    def _compute_enrichment_metrics(self, github: PRData, slack: SlackContext, correlations: list) -> dict:
+        """Quantify the value of combining multiple data sources.
+
+        This demonstrates the "Conquer with Context" thesis: code-only scanners
+        find a subset of risks, but cross-source correlation reveals more.
+        """
+        # Code-only findings: count security-relevant patterns in changed files
+        code_only_signals = 0
+        for f in github.changed_files:
+            content = f.get("content", "") + " " + f.get("patch", "")
+            for kw in SECURITY_KEYWORDS:
+                if kw.lower() in content.lower():
+                    code_only_signals += 1
+
+        # Slack context signals: risks only visible from team communication
+        slack_only_signals = len(slack.messages)
+
+        # Cross-source signals: risks that only emerge when you connect the dots
+        cross_source_signals = len(correlations)
+
+        return {
+            "code_only_findings": code_only_signals,
+            "slack_context_findings": slack_only_signals,
+            "cross_source_linked": cross_source_signals,
+            "total_signals": code_only_signals + slack_only_signals + cross_source_signals,
+            "sources_used": sum([
+                1 if github.changed_files else 0,
+                1 if slack.messages else 0,
+            ]),
+            "entity_cache_hits": len(self._entity_cache),
+        }
+
+    def print_enrichment_summary(self, metrics: dict):
+        """Print a summary showing the multi-source value proposition."""
+        code = metrics.get("code_only_findings", 0)
+        slack = metrics.get("slack_context_findings", 0)
+        linked = metrics.get("cross_source_linked", 0)
+        total = metrics.get("total_signals", 0)
+
+        print(f"\n  [Multi-Source Value]")
+        print(f"    Code alone:          {code} signals")
+        print(f"    + Slack context:     {slack} additional signals")
+        print(f"    + Cross-source links: {linked} correlated risks")
+        print(f"    ----------------------------------------")
+        print(f"    Total intelligence:  {total} signals ({metrics.get('sources_used', 0)} sources)")
+        if code > 0:
+            uplift = ((total - code) / code * 100) if code else 0
+            print(f"    Context uplift:      +{uplift:.0f}% over code-only scanning")

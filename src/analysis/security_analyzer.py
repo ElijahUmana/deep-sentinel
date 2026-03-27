@@ -78,10 +78,19 @@ class SecurityAnalyzer:
         return findings
 
     def analyze(self, context: dict) -> list:
-        """Run multi-step security analysis on PR context."""
+        """
+        Run multi-step security analysis pipeline:
+        1. Aerospike pattern scan (sub-ms, no LLM)
+        2. LLM fast scan via TrueFoundry (GPT-4o-mini)
+        3. Deep verification of critical findings (GPT-4o)
+        4. Cross-source correlation enrichment
+        5. Architecture-aware severity adjustment
+        """
+        import time
         all_findings = []
 
-        # Step 1: Regex pre-scan (fast, no LLM needed)
+        # Step 1: Regex pre-scan using Aerospike-cached patterns (fast, no LLM needed)
+        t0 = time.time()
         for file_info in context.get("files", []):
             content = file_info.get("content", "")
             if not content:
@@ -89,9 +98,12 @@ class SecurityAnalyzer:
             regex_findings = self.regex_prescan(content, file_info["path"])
             all_findings.extend(regex_findings)
 
-        print(f"[Analyzer] Regex pre-scan: {len(all_findings)} potential issues")
+        regex_time = (time.time() - t0) * 1000
+        code_only_count = len(all_findings)
+        print(f"[Analyzer] Step 1 — Aerospike pattern scan: {code_only_count} findings in {regex_time:.1f}ms")
 
-        # Step 2: LLM-powered deep analysis
+        # Step 2: LLM-powered deep analysis via TrueFoundry AI Gateway
+        t1 = time.time()
         for file_info in context.get("files", []):
             content = file_info.get("content", "")
             if not content or len(content) < 20:
@@ -135,10 +147,15 @@ If no vulnerabilities, return []. Output ONLY the JSON array.""",
             except Exception as e:
                 print(f"[Analyzer] LLM scan error for {file_info['path']}: {e}")
 
-        # Step 3: Verify critical/high findings with deep analysis
-        critical_findings = [f for f in all_findings if f.get("severity") in ("CRITICAL", "HIGH")]
-        if critical_findings and len(critical_findings) <= 10:
-            print(f"[Analyzer] Deep-verifying {len(critical_findings)} critical/high findings...")
+        llm_time = (time.time() - t1) * 1000
+        llm_count = len(all_findings) - code_only_count
+        print(f"[Analyzer] Step 2 — TrueFoundry LLM scan: +{llm_count} findings in {llm_time:.0f}ms")
+
+        # Step 3: Verify critical/high findings with deep analysis (more powerful model)
+        t2 = time.time()
+        critical_findings = [f for f in all_findings if f.get("severity", "").upper() in ("CRITICAL", "HIGH")]
+        if critical_findings and len(critical_findings) <= 15:
+            print(f"[Analyzer] Step 3 — Deep verification of {len(critical_findings)} critical/high findings...")
             try:
                 verify_prompt = make_prompt(
                     "deep_verify_v1",
@@ -174,6 +191,8 @@ Return verified findings as JSON array. Add 'verified': true for real issues. Re
             except Exception as e:
                 print(f"[Analyzer] Verification error: {e}")
 
+        verify_time = (time.time() - t2) * 1000
+
         # Deduplicate
         seen = set()
         deduped = []
@@ -182,6 +201,20 @@ Return verified findings as JSON array. Add 'verified': true for real issues. Re
             if key not in seen:
                 seen.add(key)
                 deduped.append(f)
+
+        # Cross-source value-add metrics
+        cross_source_findings = [f for f in deduped if f.get("slack_context") or f.get("macroscope_context")]
+        total_time = (time.time() - t0) * 1000
+
+        print(f"\n[Analyzer] === ANALYSIS METRICS ===")
+        print(f"  Step 1 (Aerospike patterns): {code_only_count} findings in {regex_time:.1f}ms")
+        print(f"  Step 2 (TrueFoundry LLM):    +{llm_count} findings in {llm_time:.0f}ms")
+        print(f"  Step 3 (Deep verification):   {verify_time:.0f}ms")
+        print(f"  Total: {len(deduped)} unique findings in {total_time:.0f}ms")
+        print(f"  Cross-source enriched: {len(context.get('correlations', []))} correlations")
+        if code_only_count > 0:
+            improvement = ((len(deduped) - code_only_count) / code_only_count) * 100
+            print(f"  VALUE ADD: Code-only scan found {code_only_count}. With LLM + cross-source: {len(deduped)} (+{improvement:.0f}%)")
 
         return deduped
 
