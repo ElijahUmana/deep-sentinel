@@ -130,14 +130,23 @@ async def demo():
         if f.get("content") and f["path"] not in [af["path"] for af in all_files]:
             all_files.append(f)
 
-    # Slack context (simulated for demo — real connector ready with SLACK_BOT_TOKEN)
-    slack_context = [
-        "John (Mar 14, #engineering): 'Let's skip input validation for the payment endpoint — we'll add it in Q2'",
-        "Sarah (Mar 15, #engineering): 'The DB password for payments is still hardcoded, can someone move it to secrets manager?'",
-        "Mike (Mar 20, #security-review): 'Has anyone reviewed the refund endpoint? It's using os.system directly'",
-        "Lisa (Mar 22, #engineering): 'The auth module uses MD5 — we need to upgrade to bcrypt before launch'",
-    ]
-    print(f"  [Airbyte/Slack] {len(slack_context)} security-relevant messages found")
+    # Slack: Try real Airbyte Slack connector first, fall back to representative data
+    slack_data = await data.get_security_discussions()
+    if slack_data.messages:
+        slack_context = [m.get("text", "") for m in slack_data.messages[:10]]
+        print(f"  [Airbyte/Slack] LIVE: {len(slack_context)} security messages from {len(slack_data.channels_searched)} channels")
+    else:
+        # Representative Slack context for demo — the Airbyte SlackConnector is
+        # fully wired and tested; it requires SLACK_BOT_TOKEN env var pointing to
+        # a workspace where the bot has been invited to channels.
+        # These messages represent the KIND of cross-source intelligence DeepSentinel finds.
+        slack_context = [
+            "John (Mar 14, #engineering): 'Let's skip input validation for the payment endpoint — we'll add it in Q2'",
+            "Sarah (Mar 15, #engineering): 'The DB password for payments is still hardcoded, can someone move it to secrets manager?'",
+            "Mike (Mar 20, #security-review): 'Has anyone reviewed the refund endpoint? It's using os.system directly'",
+            "Lisa (Mar 22, #engineering): 'The auth module uses MD5 — we need to upgrade to bcrypt before launch'",
+        ]
+        print(f"  [Airbyte/Slack] {len(slack_context)} security messages (representative — set SLACK_BOT_TOKEN for live)")
 
     cross_source_correlations = [
         {
