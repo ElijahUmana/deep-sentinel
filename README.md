@@ -6,7 +6,7 @@
 
 DeepSentinel is an autonomous AI agent that correlates GitHub PRs, Issues, review comments, Slack discussions, and codebase architecture to find security risks that live between your tools.
 
-**See it in action:** [Security review posted on a real PR](https://github.com/ElijahUmana/demo-vulnerable-app/pull/1) | [Install as a skill](Install: npx skills add ElijahUmana/deep-sentinel --skill deepsentinel)
+**See it in action:** [Security review posted on a real PR](https://github.com/ElijahUmana/demo-vulnerable-app/pull/1) | Install skill: `npx skills add ElijahUmana/deep-sentinel --skill deepsentinel`
 
 ## The Problem
 
@@ -61,7 +61,7 @@ DeepSentinel is an autonomous agent that:
 | **Macroscope** | Codebase understanding | Architecture-aware severity scoring. A vulnerability in the payment module is more critical than one in tests. |
 | **Ghost** | Persistent Postgres | Vulnerability history, scan audit trail, cross-source correlation records. Agent manages its own DB lifecycle. |
 | **Aerospike** | Real-time cache | Sub-ms CVE lookups, scan dedup, vulnerability pattern matching. TTL-based expiration for cache management. |
-| **TrueFoundry** | AI Gateway | Multi-model routing (fast scan with GPT-4o-mini, deep analysis with GPT-4o). Observability and cost tracking. |
+| **TrueFoundry** | AI Gateway | Multi-model routing (GPT-4o-mini for fast scan, Claude Sonnet 4 or GPT-4o for deep analysis). Observability and cost tracking. |
 | **Overmind** | Prompt optimization | Every LLM call instrumented. Prompts optimized over time based on accepted/rejected findings. |
 
 ## Quick Start

@@ -23,7 +23,7 @@ DeepSentinel is an autonomous AI agent that pulls real-time data from GitHub PRs
 1. **GATHER** — Airbyte agent connectors pull PR data, file content, GitHub Issues, PR review comments, and Slack discussions in parallel
 2. **UNDERSTAND** — Macroscope analyzes codebase architecture for context-aware severity scoring
 3. **CACHE** — Aerospike matches code against 10 CWE-mapped vulnerability patterns in <2ms
-4. **ANALYZE** — TrueFoundry AI Gateway routes multi-model analysis (GPT-4o-mini for fast scan, GPT-4o for deep verification) with per-call cost tracking
+4. **ANALYZE** — TrueFoundry AI Gateway routes multi-model analysis (GPT-4o-mini for fast scan, Claude Sonnet 4 for deep verification) with per-call cost tracking
 5. **CORRELATE** — Three-strategy correlation engine: keyword matching + file/module correlation + LLM-discovered non-obvious connections
 6. **STORE** — Ghost Postgres persists findings, correlations, and audit history with database forking for safe experimentation
 7. **AUTHORIZE** — Auth0 CIBA requests human approval before creating security tickets for critical findings
@@ -52,7 +52,7 @@ Each correlation explains WHY code-only scanners miss it and WHAT risk it reveal
 | **Airbyte** | GitHub + Slack connectors + entity caching + enrichment metrics | Real PR data, file content, Issues, PR comments pulled via connector |
 | **Macroscope** | Webhook API + custom security rules + architecture-aware severity | Live webhook (hooks.macroscope.com), macroscope.md custom rules |
 | **Ghost** | Postgres with schema inspection + SQL history queries + DB forking | DB uipdk8byh3 with 240+ findings, ghost fork for experiments |
-| **TrueFoundry** | AI Gateway with multi-model routing + per-call cost tracking | gateway.truefoundry.ai, GPT-4o-mini + GPT-4o, $X.XXXX per scan |
+| **TrueFoundry** | AI Gateway with multi-model routing + per-call cost tracking | gateway.truefoundry.ai, GPT-4o-mini + Claude Sonnet 4, $0.003 per scan |
 | **Aerospike** | Data model (namespace/set/bin) + TTL expiration + session state | 10 CWE patterns, scan dedup, <2ms pattern matching |
 | **Overmind** | OverClaw CLI optimization with real traces + policies + eval | 12 traces, 39.7→56.2 score improvement, experiments/results.tsv |
 
