@@ -1,0 +1,51 @@
+{
+  "trace_id": "holdout_000",
+  "input_data": {
+    "code": "import requests\ndef fetch_url(url):\n    return requests.get(url).text",
+    "file_path": "api/fetcher.py",
+    "context": "URL fetching service"
+  },
+  "output_data": {
+    "findings": [
+      {
+        "severity": "HIGH",
+        "cwe_id": "CWE-918",
+        "title": "Server-Side Request Forgery (SSRF)",
+        "line_number": 3,
+        "description": "The function accepts user-controlled URLs without validation and makes server-side HTTP requests, allowing attackers to access internal services, scan internal networks, or bypass firewalls",
+        "fix": "Implement URL validation by checking against an allowlist of permitted domains/schemes, validate the URL format, and restrict access to internal IP ranges (127.0.0.1, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)"
+      }
+    ],
+    "risk_level": "HIGH",
+    "recommendation": "BLOCK",
+    "findings_count": 1
+  },
+  "spans": [
+    {
+      "span_type": "llm_call",
+      "name": "claude-sonnet-4-20250514",
+      "start_time": 1774643778.633878,
+      "end_time": 1774643782.369319,
+      "latency_ms": 3735.440969467163,
+      "metadata": {
+        "model": "claude-sonnet-4-20250514",
+        "messages_count": 2,
+        "tools_provided": [],
+        "response_content": "{\"findings\": [{\"severity\": \"HIGH\", \"cwe_id\": \"CWE-918\", \"title\": \"Server-Side Request Forgery (SSRF)\", \"line_number\": 3, \"description\": \"The function accepts user-controlled URLs without validation and makes server-side HTTP requests, allowing attackers to access internal services, scan internal networks, or bypass firewalls\", \"fix\": \"Implement URL validation by checking against an allowlist of permitted domains/schemes, validate the URL format, and restrict access to internal IP ranges (127.0.0.1, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)\"}], \"risk_level\": \"HIGH\", \"recommendation\": \"BLOCK\"}",
+        "tool_calls": [],
+        "prompt_tokens": 500,
+        "completion_tokens": 180,
+        "total_tokens": 680,
+        "cost": 0.004200000000000001
+      },
+      "error": null
+    }
+  ],
+  "start_time": 1774643778.633858,
+  "end_time": 1774643782.3694232,
+  "total_latency_ms": 3735.565185546875,
+  "total_tokens": 680,
+  "total_cost": 0.004200000000000001,
+  "score": 0.0,
+  "error": null
+}

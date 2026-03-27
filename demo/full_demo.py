@@ -51,7 +51,7 @@ async def demo():
     print()
 
     auth = Auth0Client()          # Auth0: identity + token vault + CIBA
-    data = AirbyteDataLayer()     # Airbyte: GitHub + Slack connectors
+    data = AirbyteDataLayer(auth0_client=auth)  # Airbyte: GitHub + Slack via Auth0 Token Vault
     macroscope = MacroscopeClient()  # Macroscope: codebase understanding
     llm = TrueFoundryGateway()    # TrueFoundry: AI Gateway multi-model routing
     db = GhostDB()                # Ghost: persistent Postgres
@@ -229,6 +229,23 @@ async def demo():
     stats = await db.get_scan_stats()
     print(f"  Cumulative: {stats.get('total_scans', 0)} scans, {stats.get('total_findings', 0)} findings")
 
+    # Query historical patterns from Ghost
+    historical = await db.get_historical_patterns(owner, repo)
+    if historical:
+        print(f"  Historical patterns in Ghost:")
+        for h in historical[:5]:
+            print(f"    {h.get('cwe_id', '?')}: {h.get('count', 0)} occurrences (last: {h.get('last_seen', '?')})")
+
+    # Show Ghost schema (LLM-optimized format)
+    db_id = os.environ.get("GHOST_DB_ID", "")
+    if db_id:
+        schema_output = GhostDB.get_schema(db_id)
+        if schema_output and "TABLE" in schema_output:
+            print(f"\n  [Ghost Schema] Database structure (LLM-optimized):")
+            for line in schema_output.split("\n")[:8]:
+                if line.strip():
+                    print(f"    {line.strip()}")
+
     # Demonstrate Ghost forking
     print(f"\n  [Ghost Fork] Creating safe experiment fork...")
     fork_result = GhostDB.fork_database(os.environ.get("GHOST_DB_ID", ""), f"experiment-{scan_id[:6]}")
@@ -260,6 +277,10 @@ async def demo():
     report = analyzer.generate_report(findings, cross_source_correlations)
     elapsed = time.time() - start_time
 
+    # TrueFoundry cost summary
+    total_cost = getattr(llm, 'total_cost', 0)
+    total_calls = getattr(llm, 'total_calls', 0)
+
     header(f"SCAN COMPLETE — {elapsed:.1f}s")
     print(f"  Files scanned: {len(all_files)}")
     print(f"  Findings: {len(findings)} ({critical_count} critical, {severity_counts.get('HIGH', 0)} high)")
@@ -267,6 +288,8 @@ async def demo():
     print(f"  Data persisted: Ghost Postgres (uipdk8byh3)")
     print(f"  Cache: Aerospike ({len(patterns)} patterns)")
     print(f"  LLM routing: TrueFoundry AI Gateway")
+    print(f"  LLM calls: {total_calls} | Total cost: ${total_cost:.4f}")
+    print(f"  Ghost DB: {os.environ.get('GHOST_DB_ID', 'N/A')} (with fork for experiments)")
     print(f"  Auth: Auth0 CIBA ({'' if critical_count else 'no critical — '}approval {'requested' if critical_count else 'not needed'})")
     print()
 

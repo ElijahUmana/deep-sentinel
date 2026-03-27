@@ -1,0 +1,51 @@
+{
+  "trace_id": "holdout_001",
+  "input_data": {
+    "code": "def redirect_user(redirect_url):\n    return redirect(redirect_url)",
+    "file_path": "views/auth.py",
+    "context": "Authentication redirect handler"
+  },
+  "output_data": {
+    "findings": [
+      {
+        "severity": "HIGH",
+        "cwe_id": "CWE-601",
+        "title": "Open Redirect Vulnerability",
+        "line_number": 2,
+        "description": "The function accepts an arbitrary redirect_url parameter without validation and passes it directly to redirect(). This allows attackers to redirect users to malicious external sites by providing URLs like 'http://evil.com'.",
+        "fix": "Validate the redirect URL against a whitelist of allowed domains or paths. Check if the URL is relative or belongs to your application domain before redirecting."
+      }
+    ],
+    "risk_level": "HIGH",
+    "recommendation": "BLOCK",
+    "findings_count": 1
+  },
+  "spans": [
+    {
+      "span_type": "llm_call",
+      "name": "claude-sonnet-4-20250514",
+      "start_time": 1774643778.635987,
+      "end_time": 1774643782.4776,
+      "latency_ms": 3841.6130542755127,
+      "metadata": {
+        "model": "claude-sonnet-4-20250514",
+        "messages_count": 2,
+        "tools_provided": [],
+        "response_content": "{\"findings\": [{\"severity\": \"HIGH\", \"cwe_id\": \"CWE-601\", \"title\": \"Open Redirect Vulnerability\", \"line_number\": 2, \"description\": \"The function accepts an arbitrary redirect_url parameter without validation and passes it directly to redirect(). This allows attackers to redirect users to malicious external sites by providing URLs like 'http://evil.com'.\", \"fix\": \"Validate the redirect URL against a whitelist of allowed domains or paths. Check if the URL is relative or belongs to your application domain before redirecting.\"}], \"risk_level\": \"HIGH\", \"recommendation\": \"BLOCK\"}",
+        "tool_calls": [],
+        "prompt_tokens": 496,
+        "completion_tokens": 144,
+        "total_tokens": 640,
+        "cost": 0.003648
+      },
+      "error": null
+    }
+  ],
+  "start_time": 1774643778.635978,
+  "end_time": 1774643782.4777012,
+  "total_latency_ms": 3841.7232036590576,
+  "total_tokens": 640,
+  "total_cost": 0.003648,
+  "score": 0.0,
+  "error": null
+}

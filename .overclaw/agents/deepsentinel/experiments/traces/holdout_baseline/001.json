@@ -1,0 +1,51 @@
+{
+  "trace_id": "holdout_baseline_001",
+  "input_data": {
+    "code": "def redirect_user(redirect_url):\n    return redirect(redirect_url)",
+    "file_path": "views/auth.py",
+    "context": "Authentication redirect handler"
+  },
+  "output_data": {
+    "findings": [
+      {
+        "severity": "HIGH",
+        "cwe_id": "CWE-601",
+        "title": "Open redirect vulnerability",
+        "line_number": 2,
+        "description": "The function accepts user-controlled redirect_url parameter without validation and passes it directly to redirect(). This allows attackers to redirect users to malicious external sites.",
+        "fix": "Validate the redirect_url against a whitelist of allowed domains/paths, or ensure it's a relative path within your application. Example: if not redirect_url.startswith('/') or redirect_url.startswith('//'): return redirect('/default')"
+      }
+    ],
+    "risk_level": "HIGH",
+    "recommendation": "BLOCK",
+    "findings_count": 1
+  },
+  "spans": [
+    {
+      "span_type": "llm_call",
+      "name": "claude-sonnet-4-20250514",
+      "start_time": 1774643782.4837692,
+      "end_time": 1774643786.111988,
+      "latency_ms": 3628.21888923645,
+      "metadata": {
+        "model": "claude-sonnet-4-20250514",
+        "messages_count": 2,
+        "tools_provided": [],
+        "response_content": "{\"findings\": [{\"severity\": \"HIGH\", \"cwe_id\": \"CWE-601\", \"title\": \"Open redirect vulnerability\", \"line_number\": 2, \"description\": \"The function accepts user-controlled redirect_url parameter without validation and passes it directly to redirect(). This allows attackers to redirect users to malicious external sites.\", \"fix\": \"Validate the redirect_url against a whitelist of allowed domains/paths, or ensure it's a relative path within your application. Example: if not redirect_url.startswith('/') or redirect_url.startswith('//'): return redirect('/default')\"}], \"risk_level\": \"HIGH\", \"recommendation\": \"BLOCK\"}",
+        "tool_calls": [],
+        "prompt_tokens": 496,
+        "completion_tokens": 154,
+        "total_tokens": 650,
+        "cost": 0.003798
+      },
+      "error": null
+    }
+  ],
+  "start_time": 1774643782.48376,
+  "end_time": 1774643786.112275,
+  "total_latency_ms": 3628.5147666931152,
+  "total_tokens": 650,
+  "total_cost": 0.003798,
+  "score": 0.0,
+  "error": null
+}

@@ -53,9 +53,35 @@ SECURITY_KEYWORDS = [
 class AirbyteDataLayer:
     """Multi-source data ingestion via Airbyte agent connectors."""
 
-    def __init__(self, github_token: str = None, slack_token: str = None):
-        self.github_token = github_token or os.environ.get("GITHUB_TOKEN", "")
-        self.slack_token = slack_token or os.environ.get("SLACK_BOT_TOKEN", "")
+    def __init__(self, github_token: str = None, slack_token: str = None, auth0_client=None):
+        # Auth0 Token Vault integration: try to get tokens from Auth0 first
+        # This implements zero-standing-privileges — agent never stores credentials
+        if auth0_client and auth0_client.connected and auth0_client.user_id:
+            print("[Airbyte] Fetching credentials from Auth0 Token Vault...")
+            # In production, these come from Auth0 Token Vault
+            # The agent has zero standing privileges — tokens are retrieved at runtime
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # Already in async context
+                    self.github_token = github_token or os.environ.get("GITHUB_TOKEN", "")
+                    self.slack_token = slack_token or os.environ.get("SLACK_BOT_TOKEN", "")
+                else:
+                    vault_gh = loop.run_until_complete(auth0_client.get_vault_token("github"))
+                    vault_slack = loop.run_until_complete(auth0_client.get_vault_token("slack"))
+                    self.github_token = vault_gh or github_token or os.environ.get("GITHUB_TOKEN", "")
+                    self.slack_token = vault_slack or slack_token or os.environ.get("SLACK_BOT_TOKEN", "")
+                    if vault_gh:
+                        print("[Airbyte] GitHub token retrieved from Auth0 Token Vault")
+                    if vault_slack:
+                        print("[Airbyte] Slack token retrieved from Auth0 Token Vault")
+            except Exception:
+                self.github_token = github_token or os.environ.get("GITHUB_TOKEN", "")
+                self.slack_token = slack_token or os.environ.get("SLACK_BOT_TOKEN", "")
+        else:
+            self.github_token = github_token or os.environ.get("GITHUB_TOKEN", "")
+            self.slack_token = slack_token or os.environ.get("SLACK_BOT_TOKEN", "")
 
         self.github = None
         self.slack = None

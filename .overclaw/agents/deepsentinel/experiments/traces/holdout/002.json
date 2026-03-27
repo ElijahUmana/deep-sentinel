@@ -1,0 +1,42 @@
+{
+  "trace_id": "holdout_002",
+  "input_data": {
+    "code": "",
+    "file_path": "",
+    "context": ""
+  },
+  "output_data": {
+    "findings": [],
+    "risk_level": "NONE",
+    "recommendation": "APPROVE",
+    "findings_count": 0
+  },
+  "spans": [
+    {
+      "span_type": "llm_call",
+      "name": "claude-sonnet-4-20250514",
+      "start_time": 1774643778.6370409,
+      "end_time": 1774643780.349647,
+      "latency_ms": 1712.6061916351318,
+      "metadata": {
+        "model": "claude-sonnet-4-20250514",
+        "messages_count": 2,
+        "tools_provided": [],
+        "response_content": "{\"findings\": [], \"risk_level\": \"NONE\", \"recommendation\": \"APPROVE\"}",
+        "tool_calls": [],
+        "prompt_tokens": 471,
+        "completion_tokens": 23,
+        "total_tokens": 494,
+        "cost": 0.001758
+      },
+      "error": null
+    }
+  ],
+  "start_time": 1774643778.637034,
+  "end_time": 1774643780.34976,
+  "total_latency_ms": 1712.72611618042,
+  "total_tokens": 494,
+  "total_cost": 0.001758,
+  "score": 0.0,
+  "error": null
+}
