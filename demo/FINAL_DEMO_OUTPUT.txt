@@ -1,0 +1,263 @@
+[Overmind] No API key, skipping instrumentation
+
+======================================================================
+  DEEPSENTINEL — Cross-Source Security Intelligence
+======================================================================
+
+  28% of critical security incidents originate OUTSIDE code repositories
+  — in Slack, Jira, and collaboration tools (GitGuardian 2026).
+  No existing scanner connects the dots. DeepSentinel does.
+
+  Built with: Auth0 | Airbyte | Macroscope | Ghost | TrueFoundry | Aerospike | Overmind
+
+[0/7] Initializing all 7 sponsor integrations...
+
+[Auth0] Configured — secure agent identity active
+[Auth0 FGA] No FGA_STORE_ID — FGA checks will run in permissive mode
+[Airbyte] GitHub connector initialized
+[Airbyte] Slack connector initialized
+[Macroscope] Connected — codebase intelligence available
+[TrueFoundry] AI Gateway connected — multi-model routing active
+[Aerospike] Connection failed ((-10, 'Failed to connect', 'src/main/aerospike/as_cluster.c', 416, False)), using in-memory fallback
+[Aerospike] Data model: namespace=test
+[Aerospike] Sets: patterns | scan_cache (TTL 1h) | cves (TTL 24h) | sessions (TTL 2h)
+[Aerospike] Loaded 10 vulnerability patterns into set 'patterns' (0.0ms)
+[Aerospike]   Key format: (test, patterns, <pattern_id>)
+[Aerospike]   Bins: pattern_id, regex, cwe_id, severity, description, language
+[Ghost] Connected to database
+[Ghost] Schema initialized
+
+[Auth0 Device Flow] Initiating device authorization...
+  Verification URL: https://dev-cv0k6l2rcy152z4j.us.auth0.com/activate?user_code=VMKN-KZFT
+  User Code: VMKN-KZFT
+  (In production, user authenticates here; demo continues with client credentials)
+  Device flow result: demonstrated
+
+
+----------------------------------------------------------------------
+
+======================================================================
+  SCANNING: ElijahUmana/demo-vulnerable-app
+======================================================================
+
+  Scan ID: scan-0dd1000b
+  Mode: Full repository scan + PR #1 analysis
+
+[Auth0 FGA] Authorization check (permissive): user:auth0|device-OYcJpfbV can_view repo_findings:ElijahUmana/demo-vulnerable-app -> ALLOWED
+
+[1/7] GATHER — Pulling multi-source data via Airbyte agent connectors...
+  [Airbyte/GitHub] PR #1: Add payment processing endpoint
+  [Airbyte/GitHub] 1 PR files
+  [Airbyte/GitHub] 2 security-related issues found
+    #3: Security: Hardcoded credentials need to be moved to secrets manager
+    #2: Security: Input validation missing on payment endpoints
+  [Airbyte/GitHub] 2 security-relevant PR comments
+  [Airbyte/GitHub] Loaded app.py: 3444 chars
+  [Airbyte/GitHub] Loaded src/auth/login.py: 1361 chars
+  [Airbyte/GitHub] Loaded src/api/users.py: 1102 chars
+  [Cross-Source] 4 context signals from GitHub Issues + PR comments
+    GitHub Issue #3 (): 'Security: Hardcoded credentials need to be moved to secrets manager'...
+    GitHub Issue #2 (): 'Security: Input validation missing on payment endpoints'...
+    PR #1 review by ElijahUmana (2026-03-27): 'I reviewed the payment processing code and there are secu...
+    PR #1 review by ElijahUmana (2026-03-27): '## 🔴 DeepSentinel Security Review
+
+**4 findings** | 3 cri...
+  [Airbyte/Slack] LIVE: +3 Slack messages from 2 channels
+  [Correlation Engine] Strategy 1 (Issues+Comments): 4 correlations
+  [Correlation Engine] Strategy 2 (Slack keywords): 4 correlations
+    [HIGH] [known_issue_unresolved] Known issue discussed but unresolved (keywords: hardcoded, still, need
+    [MEDIUM] [slack_file_mention] Files in this PR discussed in a security context
+    [MEDIUM] [known_issue_unresolved] Known issue discussed but unresolved (keywords: need to)
+    [MEDIUM] [crypto_upgrade_needed] Cryptographic weakness discussed (keywords: md5, upgrade, bcrypt)
+  [TrueFoundry] openai-main/gpt-4o-mini | 741 tokens | $0.0002 | via gateway.truefoundry.ai
+  [Correlation Engine] Strategy 3 (LLM discovery): 3 correlations
+    [LLM] The SQL injection risk identified in the discussion directly relates t
+    [LLM] The hardcoded DB password mentioned in the discussion compounds the se
+    [LLM] The use of MD5 for password hashing in the auth module suggests a broa
+
+  [Correlation Engine] TOTAL: 11 cross-source links
+    HIGH confidence: 5 | MEDIUM: 3 | LOW: 3
+
+  [Multi-Source Value]
+    Code alone:           12 signals
+    + Issues/Comments:    7 additional signals
+    + Cross-source links: 11 correlated risks
+    ----------------------------------------
+    Total intelligence:   30 signals (4 sources)
+    Context uplift:       +150% over code-only scanning
+
+[2/7] UNDERSTAND — Analyzing codebase architecture via Macroscope...
+  app.py: module=unknown, criticality=medium
+  src/auth/login.py: module=authentication, criticality=high
+  src/api/users.py: module=api-layer, criticality=high
+  payment.py: module=payments, criticality=high
+
+[3/7] CACHE — Aerospike real-time cache + pattern matching...
+  [Aerospike Data Model] Mode: In-memory fallback (same data model)
+  [Aerospike Data Model] Namespace: test
+  [Aerospike Data Model] Sets:
+    'patterns'   -> 10 records | Bins: pattern_id, regex, cwe_id, severity, description
+    'scan_cache' -> 0 records | Bins: results, cached_at, hit_count | TTL: 1h
+    'sessions'   -> 0 records | Bins: session_id, state, updated_at | TTL: 2h
+    'cves'       -> 0 records | Bins: cve_id, severity, description, affected, cvss_score | TTL: 24h
+
+  10 CWE vulnerability patterns loaded from set 'patterns'
+  Session state cached in set 'sessions': {"status": "scanning", "files": 4, "repo": "ElijahUmana/demo-vulnerable-app"}
+  Scan dedup key cached in set 'scan_cache' (TTL: 300s)
+  TTL expiration demo: record found=True, after TTL expired=False -> correctly expired: True
+  Performance: 13 puts (avg 1us), 4 gets (avg 2us), 3 hits, 1 misses
+
+[4/7] ANALYZE — Security analysis via TrueFoundry AI Gateway...
+  Routing LLM calls through gateway.truefoundry.ai
+  Model: openai-main/gpt-4o-mini (fast scan) + deep verification
+  All calls instrumented by Overmind OverClaw for optimization
+[Analyzer] Step 1 — Aerospike pattern scan: 19 findings in 4.5ms
+  [TrueFoundry] openai-main/gpt-4o-mini | 2133 tokens | $0.0008 | via gateway.truefoundry.ai
+[Analyzer] LLM scan of app.py: 10 findings
+  [TrueFoundry] openai-main/gpt-4o-mini | 910 tokens | $0.0003 | via gateway.truefoundry.ai
+[Analyzer] LLM scan of src/auth/login.py: 3 findings
+  [TrueFoundry] openai-main/gpt-4o-mini | 946 tokens | $0.0003 | via gateway.truefoundry.ai
+[Analyzer] LLM scan of src/api/users.py: 4 findings
+  [TrueFoundry] openai-main/gpt-4o-mini | 1154 tokens | $0.0004 | via gateway.truefoundry.ai
+[Analyzer] LLM scan of payment.py: 5 findings
+[Analyzer] Step 2 — TrueFoundry LLM scan: +22 findings in 45912ms
+
+[Analyzer] === ANALYSIS METRICS ===
+  Step 1 (Aerospike patterns): 19 findings in 4.5ms
+  Step 2 (TrueFoundry LLM):    +22 findings in 45912ms
+  Step 3 (Deep verification):   0ms
+  Total: 41 unique findings in 45917ms
+  Cross-source enriched: 11 correlations
+  VALUE ADD: Code-only scan found 19. With LLM + cross-source: 41 (+116%)
+
+  Total findings: 41
+    CRITICAL: 5
+    HIGH: 25
+    MEDIUM: 11
+
+[5/7] STORE — Ghost database: schema, persist, query history, fork...
+  [Ghost] Database ID: uipdk8byh3
+  [Ghost] Running: ghost schema uipdk8byh3
+
+  [Ghost Schema] LLM-optimized database structure:
+    DATABASE: deepsentinel (uipdk8byh3)
+    TABLE: audit_log
+    id             SERIAL PRIMARY KEY
+    timestamp      TIMESTAMP WITH TIME ZONE DEFAULT now()
+    action         TEXT NOT NULL
+    actor          TEXT NOT NULL DEFAULT 'agent'::text
+    resource_type  TEXT
+    resource_id    TEXT
+    details        TEXT
+    INDEX idx_audit_action (action)
+    TABLE: correlations
+    id                SERIAL PRIMARY KEY
+    scan_id           TEXT
+    correlation_type  TEXT NOT NULL
+    github_ref        TEXT
+    slack_ref         TEXT
+    description       TEXT NOT NULL
+    risk_score        DOUBLE PRECISION
+    created_at        TIMESTAMP WITH TIME ZONE DEFAULT now()
+    INDEX idx_correlations_scan (scan_id)
+    TABLE: scans
+    id              TEXT PRIMARY KEY
+    repo_owner      TEXT NOT NULL
+    repo_name       TEXT NOT NULL
+    pr_number       INTEGER
+    trigger_type    TEXT NOT NULL DEFAULT 'manual'::text
+    started_at      TIMESTAMP WITH TIME ZONE DEFAULT now()
+    completed_at    TIMESTAMP WITH TIME ZONE
+    findings_count  INTEGER DEFAULT 0
+    critical_count  INTEGER DEFAULT 0
+    high_count      INTEGER DEFAULT 0
+    status          TEXT DEFAULT 'running'::text
+    INDEX idx_scans_repo (repo_owner, repo_name)
+    TABLE: vulnerabilities
+    id                  SERIAL PRIMARY KEY
+    scan_id             TEXT NOT NULL
+    pr_number           INTEGER
+    repo_owner          TEXT NOT NULL
+    repo_name           TEXT NOT NULL
+    file_path           TEXT NOT NULL
+    line_number         INTEGER
+    severity            TEXT NOT NULL
+    cwe_id              TEXT
+    title               TEXT NOT NULL
+    description         TEXT
+    fix_suggestion      TEXT
+    slack_context       TEXT
+    macroscope_context  TEXT
+    status              TEXT DEFAULT 'open'::text
+    created_at          TIMESTAMP WITH TIME ZONE DEFAULT now()
+    INDEX idx_vuln_repo (repo_owner, repo_name)
+    INDEX idx_vuln_scan (scan_id)
+    INDEX idx_vuln_severity (severity)
+    VIEW: pg_buffercache
+    bufferid          INTEGER
+    relfilenode       OID
+    reltablespace     OID
+    reldatabase       OID
+    relforknumber     SMALLINT
+    relblocknumber    BIGINT
+    isdirty           BOOLEAN
+    usagecount        SMALLINT
+    pinning_backends  INTEGER
+    VIEW: pg_buffercache_numa
+    bufferid     INTEGER
+    os_page_num  BIGINT
+    numa_node    INTEGER
+
+Traceback (most recent call last):
+  File "asyncpg/protocol/prepared_stmt.pyx", line 175, in asyncpg.protocol.protocol.PreparedStatementState._encode_bind_msg
+  File "asyncpg/protocol/codecs/base.pyx", line 251, in asyncpg.protocol.protocol.Codec.encode
+  File "asyncpg/protocol/codecs/base.pyx", line 153, in asyncpg.protocol.protocol.Codec.encode_scalar
+  File "asyncpg/pgproto/codecs/text.pyx", line 29, in asyncpg.pgproto.pgproto.text_encode
+  File "asyncpg/pgproto/codecs/text.pyx", line 12, in asyncpg.pgproto.pgproto.as_pg_string_and_size
+TypeError: expected str, got list
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/elijahumana/deep-agents-hackathon/demo/full_demo.py", line 549, in <module>
+    asyncio.run(demo())
+    ~~~~~~~~~~~^^^^^^^^
+  File "/opt/anaconda3/lib/python3.13/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/opt/anaconda3/lib/python3.13/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/opt/anaconda3/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/Users/elijahumana/deep-agents-hackathon/demo/full_demo.py", line 359, in demo
+    await db.record_correlation(scan_id, corr)
+  File "/Users/elijahumana/deep-agents-hackathon/src/storage/ghost_db.py", line 147, in record_correlation
+    await conn.execute(
+    ...<4 lines>...
+    )
+  File "/Users/elijahumana/deep-agents-hackathon/venv/lib/python3.13/site-packages/asyncpg/connection.py", line 357, in execute
+    _, status, _ = await self._execute(
+                   ^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "/Users/elijahumana/deep-agents-hackathon/venv/lib/python3.13/site-packages/asyncpg/connection.py", line 1873, in _execute
+    result, _ = await self.__execute(
+                ^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "/Users/elijahumana/deep-agents-hackathon/venv/lib/python3.13/site-packages/asyncpg/connection.py", line 1970, in __execute
+    result, stmt = await self._do_execute(
+                   ^^^^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "/Users/elijahumana/deep-agents-hackathon/venv/lib/python3.13/site-packages/asyncpg/connection.py", line 2033, in _do_execute
+    result = await executor(stmt, None)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "asyncpg/protocol/protocol.pyx", line 184, in bind_execute
+  File "asyncpg/protocol/prepared_stmt.pyx", line 204, in asyncpg.protocol.protocol.PreparedStatementState._encode_bind_msg
+asyncpg.exceptions.DataError: invalid input for query argument $3: ['payment.py'] (expected str, got list)
