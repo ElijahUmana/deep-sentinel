@@ -378,10 +378,8 @@ async def demo():
     # ===========================
     # VALUE-ADD METRIC
     # ===========================
-    # Count code-only findings (regex prescan) vs total with cross-source context
-    code_only_findings = [f for f in findings if f.get("source") == "regex_prescan"]
-    context_findings = [f for f in findings if f.get("source") != "regex_prescan"]
-    code_only_count = len(code_only_findings)
+    # Use the analyzer's tracked code-only count (regex prescan before LLM verification replaces them)
+    code_only_count = getattr(analyzer, 'code_only_count', 0)
     total_count = len(findings)
     context_added = total_count - code_only_count
     uplift_pct = (context_added / code_only_count * 100) if code_only_count > 0 else 0

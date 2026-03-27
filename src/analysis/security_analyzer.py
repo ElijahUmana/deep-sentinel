@@ -100,6 +100,7 @@ class SecurityAnalyzer:
 
         regex_time = (time.time() - t0) * 1000
         code_only_count = len(all_findings)
+        self.code_only_count = code_only_count
         print(f"[Analyzer] Step 1 — Aerospike pattern scan: {code_only_count} findings in {regex_time:.1f}ms")
 
         # Step 2: LLM-powered deep analysis via TrueFoundry AI Gateway
