@@ -9,9 +9,10 @@ openai>=1.0.0
 # Auth0 (Secure Agent Identity)
 auth0-ai
 
-# Airbyte Agent Connectors (Multi-Source Data)
+# Airbyte Agent Connectors (Multi-Source Data — 3 connectors)
 airbyte-agent-github>=0.18.0
 airbyte-agent-slack>=0.1.0
+airbyte-agent-jira>=0.1.0
 
 # Overmind (Prompt Optimization)
 overmind-sdk>=0.1.0
