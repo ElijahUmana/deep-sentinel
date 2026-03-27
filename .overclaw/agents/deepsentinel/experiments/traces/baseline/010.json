@@ -1,0 +1,43 @@
+{
+  "trace_id": "baseline_010",
+  "input_data": {
+    "code": "# This is just a comment\n# TODO: implement security checks",
+    "file_path": "todo.py",
+    "context": "Planning file with comments only"
+  },
+  "output_data": {
+    "findings": [],
+    "risk_level": "UNKNOWN",
+    "recommendation": "REVIEW",
+    "findings_count": 0,
+    "raw_analysis": "\\n{\\n  \"findings\": [],\\n  \"risk_level\": \"NONE\",\\n  \"recommendation\": \"APPROVE\"\\n}\\n"
+  },
+  "spans": [
+    {
+      "span_type": "llm_call",
+      "name": "claude-sonnet-4-20250514",
+      "start_time": 1774643110.470266,
+      "end_time": 1774643113.1716301,
+      "latency_ms": 2701.364040374756,
+      "metadata": {
+        "model": "claude-sonnet-4-20250514",
+        "messages_count": 2,
+        "tools_provided": [],
+        "response_content": "```json\n{\n  \"findings\": [],\n  \"risk_level\": \"NONE\",\n  \"recommendation\": \"APPROVE\"\n}\n```\n\nThis file contains only comments and no executable code. There are no security vulnerabilities to analyze as no actual implementation exists. The TODO comment about implementing security checks is noted but doesn't constitute a vulnerability in itself.",
+        "tool_calls": [],
+        "prompt_tokens": 205,
+        "completion_tokens": 80,
+        "total_tokens": 285,
+        "cost": 0.0018150000000000002
+      },
+      "error": null
+    }
+  ],
+  "start_time": 1774643110.4702551,
+  "end_time": 1774643113.1718569,
+  "total_latency_ms": 2701.60174369812,
+  "total_tokens": 285,
+  "total_cost": 0.0018150000000000002,
+  "score": 0.0,
+  "error": null
+}

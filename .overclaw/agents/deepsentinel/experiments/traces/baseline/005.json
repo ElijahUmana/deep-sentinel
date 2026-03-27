@@ -1,0 +1,43 @@
+{
+  "trace_id": "baseline_005",
+  "input_data": {
+    "code": "import hashlib\npassword_hash = hashlib.md5(password.encode()).hexdigest()",
+    "file_path": "auth.py",
+    "context": "Password hashing function"
+  },
+  "output_data": {
+    "findings": [],
+    "risk_level": "UNKNOWN",
+    "recommendation": "REVIEW",
+    "findings_count": 1,
+    "raw_analysis": "\\n{\\n  \"findings\": [\\n    {\\n      \"severity\": \"HIGH\",\\n      \"cwe_id\": \"CWE-327\",\\n      \"title\": \"Use of Weak Cryptographic Hash Function (MD5)\",\\n      \"line_number\": 2,\\n      \"description\": \"The code uses MD5 for password hashing, which is cryptographically broken and unsuitable for password storage. MD5 is vulnerable to collision attacks and can be easily cracked with rainbow tables or brute force attacks. MD5 hashes can be computed very quickly, making password cracking feasible.\",\\n     "
+  },
+  "spans": [
+    {
+      "span_type": "llm_call",
+      "name": "claude-sonnet-4-20250514",
+      "start_time": 1774643106.317991,
+      "end_time": 1774643110.468678,
+      "latency_ms": 4150.686979293823,
+      "metadata": {
+        "model": "claude-sonnet-4-20250514",
+        "messages_count": 2,
+        "tools_provided": [],
+        "response_content": "```json\n{\n  \"findings\": [\n    {\n      \"severity\": \"HIGH\",\n      \"cwe_id\": \"CWE-327\",\n      \"title\": \"Use of Weak Cryptographic Hash Function (MD5)\",\n      \"line_number\": 2,\n      \"description\": \"The code uses MD5 for password hashing, which is cryptographically broken and unsuitable for password storage. MD5 is vulnerable to collision attacks and can be easily cracked with rainbow tables or brute force attacks. MD5 hashes can be computed very quickly, making password cracking feasible.\",\n      \"fix\": \"Replace MD5 with a secure password hashing algorithm like bcrypt, scrypt, or Argon2. Example: `import bcrypt; password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())`\"\n    }\n  ],\n  \"risk_level\": \"HIGH\",\n  \"recommendation\": \"BLOCK\"\n}\n```",
+        "tool_calls": [],
+        "prompt_tokens": 213,
+        "completion_tokens": 233,
+        "total_tokens": 446,
+        "cost": 0.0041340000000000005
+      },
+      "error": null
+    }
+  ],
+  "start_time": 1774643106.317984,
+  "end_time": 1774643110.4689322,
+  "total_latency_ms": 4150.948047637939,
+  "total_tokens": 446,
+  "total_cost": 0.0041340000000000005,
+  "score": 0.0,
+  "error": null
+}

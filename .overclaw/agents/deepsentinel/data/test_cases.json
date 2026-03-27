@@ -1,0 +1,125 @@
+[
+  {
+    "input": {
+      "code": "import sqlite3\n\ndef get_user(username):\n    conn = sqlite3.connect('users.db')\n    cursor = conn.cursor()\n    query = f\"SELECT * FROM users WHERE username = '{username}'\"\n    cursor.execute(query)\n    return cursor.fetchone()\n",
+      "file_path": "app/db/users.py",
+      "context": "User lookup endpoint called from /api/users/<username>"
+    },
+    "expected_output": {
+      "findings": [{"severity": "CRITICAL", "cwe_id": "CWE-89", "title": "SQL Injection via string formatting"}],
+      "risk_level": "CRITICAL",
+      "recommendation": "BLOCK"
+    }
+  },
+  {
+    "input": {
+      "code": "from flask import Flask, request, render_template_string\n\napp = Flask(__name__)\n\n@app.route('/search')\ndef search():\n    query = request.args.get('q', '')\n    return render_template_string(f'<h1>Results for: {query}</h1>')\n",
+      "file_path": "app/routes/search.py",
+      "context": "Public search endpoint, no authentication required"
+    },
+    "expected_output": {
+      "findings": [{"severity": "HIGH", "cwe_id": "CWE-79", "title": "Reflected XSS via template injection"}],
+      "risk_level": "HIGH",
+      "recommendation": "BLOCK"
+    }
+  },
+  {
+    "input": {
+      "code": "import os\n\nAWS_ACCESS_KEY = 'AKIAIOSFODNN7EXAMPLE'\nAWS_SECRET_KEY = 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'\nDB_PASSWORD = 'super_secret_p@ssw0rd!'\n\ndef connect_to_s3():\n    import boto3\n    return boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_KEY)\n",
+      "file_path": "config/aws_config.py",
+      "context": "AWS configuration module loaded at startup"
+    },
+    "expected_output": {
+      "findings": [{"severity": "CRITICAL", "cwe_id": "CWE-798", "title": "Hardcoded AWS credentials"}],
+      "risk_level": "CRITICAL",
+      "recommendation": "BLOCK"
+    }
+  },
+  {
+    "input": {
+      "code": "import subprocess\nfrom flask import request\n\n@app.route('/admin/ping')\ndef ping_host():\n    host = request.args.get('host')\n    result = subprocess.run(f'ping -c 3 {host}', shell=True, capture_output=True, text=True)\n    return result.stdout\n",
+      "file_path": "app/routes/admin.py",
+      "context": "Admin diagnostic endpoint for network testing"
+    },
+    "expected_output": {
+      "findings": [{"severity": "CRITICAL", "cwe_id": "CWE-78", "title": "OS Command Injection via shell=True"}],
+      "risk_level": "CRITICAL",
+      "recommendation": "BLOCK"
+    }
+  },
+  {
+    "input": {
+      "code": "import os\nfrom flask import request, send_file\n\n@app.route('/download')\ndef download_file():\n    filename = request.args.get('file')\n    filepath = os.path.join('/var/app/uploads', filename)\n    return send_file(filepath)\n",
+      "file_path": "app/routes/files.py",
+      "context": "File download endpoint for user-uploaded content"
+    },
+    "expected_output": {
+      "findings": [{"severity": "HIGH", "cwe_id": "CWE-22", "title": "Path Traversal via unsanitized filename"}],
+      "risk_level": "HIGH",
+      "recommendation": "BLOCK"
+    }
+  },
+  {
+    "input": {
+      "code": "import hashlib\n\ndef hash_password(password: str) -> str:\n    return hashlib.md5(password.encode()).hexdigest()\n\ndef verify_password(password: str, hashed: str) -> bool:\n    return hash_password(password) == hashed\n",
+      "file_path": "app/auth/passwords.py",
+      "context": "Password hashing used during user registration and login"
+    },
+    "expected_output": {
+      "findings": [{"severity": "HIGH", "cwe_id": "CWE-327", "title": "Weak cryptographic hash (MD5) for passwords"}],
+      "risk_level": "HIGH",
+      "recommendation": "BLOCK"
+    }
+  },
+  {
+    "input": {
+      "code": "import requests\nfrom flask import request\n\n@app.route('/api/fetch')\ndef fetch_url():\n    url = request.args.get('url')\n    resp = requests.get(url)\n    return resp.text\n",
+      "file_path": "app/routes/proxy.py",
+      "context": "URL fetching proxy for external resource loading"
+    },
+    "expected_output": {
+      "findings": [{"severity": "HIGH", "cwe_id": "CWE-918", "title": "Server-Side Request Forgery (SSRF)"}],
+      "risk_level": "HIGH",
+      "recommendation": "BLOCK"
+    }
+  },
+  {
+    "input": {
+      "code": "import pickle\nimport base64\nfrom flask import request\n\n@app.route('/api/session', methods=['POST'])\ndef load_session():\n    data = request.form.get('session_data')\n    session = pickle.loads(base64.b64decode(data))\n    return {'user': session.get('username')}\n",
+      "file_path": "app/routes/session.py",
+      "context": "Session restoration from client-provided data"
+    },
+    "expected_output": {
+      "findings": [{"severity": "CRITICAL", "cwe_id": "CWE-502", "title": "Insecure deserialization of user-controlled pickle data"}],
+      "risk_level": "CRITICAL",
+      "recommendation": "BLOCK"
+    }
+  },
+  {
+    "input": {
+      "code": "from flask import Flask, jsonify\nimport logging\n\napp = Flask(__name__)\nlogger = logging.getLogger(__name__)\n\n@app.route('/api/health')\ndef health_check():\n    return jsonify({'status': 'ok', 'version': '1.2.3'})\n\n@app.route('/api/users/<int:user_id>')\ndef get_user(user_id):\n    user = db.query(User).filter(User.id == user_id).first()\n    if not user:\n        return jsonify({'error': 'Not found'}), 404\n    return jsonify({'id': user.id, 'name': user.name})\n",
+      "file_path": "app/routes/api.py",
+      "context": "Standard REST API endpoints with parameterized queries"
+    },
+    "expected_output": {
+      "findings": [],
+      "risk_level": "LOW",
+      "recommendation": "APPROVE"
+    }
+  },
+  {
+    "input": {
+      "code": "from flask import request, redirect\nimport re\n\n@app.route('/redirect')\ndef open_redirect():\n    target = request.args.get('url', '/')\n    return redirect(target)\n\n@app.route('/api/eval', methods=['POST'])\ndef run_eval():\n    expression = request.json.get('expr')\n    result = eval(expression)\n    return {'result': str(result)}\n",
+      "file_path": "app/routes/utils.py",
+      "context": "Utility endpoints for redirects and dynamic evaluation"
+    },
+    "expected_output": {
+      "findings": [
+        {"severity": "CRITICAL", "cwe_id": "CWE-601", "title": "Open Redirect"},
+        {"severity": "CRITICAL", "cwe_id": "CWE-95", "title": "Code injection via eval() on user input"}
+      ],
+      "risk_level": "CRITICAL",
+      "recommendation": "BLOCK"
+    }
+  }
+]

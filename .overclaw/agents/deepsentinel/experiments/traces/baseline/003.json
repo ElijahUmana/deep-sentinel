@@ -1,0 +1,43 @@
+{
+  "trace_id": "baseline_003",
+  "input_data": {
+    "code": "return f\"<div>Hello {username}</div>\"",
+    "file_path": "templates.py",
+    "context": "HTML template rendering"
+  },
+  "output_data": {
+    "findings": [],
+    "risk_level": "UNKNOWN",
+    "recommendation": "REVIEW",
+    "findings_count": 1,
+    "raw_analysis": "\\n{\\n  \"findings\": [\\n    {\\n      \"severity\": \"MEDIUM\",\\n      \"cwe_id\": \"CWE-79\",\\n      \"title\": \"Cross-Site Scripting (XSS) - Reflected\",\\n      \"line_number\": 1,\\n      \"description\": \"User input \\'username\\' is directly inserted into HTML output without proper escaping or sanitization. This allows attackers to inject malicious JavaScript code that will execute in users\\' browsers.\",\\n      \"fix\": \"Use proper HTML escaping/encoding before inserting user data into HTML. Example: html.escape("
+  },
+  "spans": [
+    {
+      "span_type": "llm_call",
+      "name": "claude-sonnet-4-20250514",
+      "start_time": 1774643101.965489,
+      "end_time": 1774643106.317069,
+      "latency_ms": 4351.5801429748535,
+      "metadata": {
+        "model": "claude-sonnet-4-20250514",
+        "messages_count": 2,
+        "tools_provided": [],
+        "response_content": "```json\n{\n  \"findings\": [\n    {\n      \"severity\": \"MEDIUM\",\n      \"cwe_id\": \"CWE-79\",\n      \"title\": \"Cross-Site Scripting (XSS) - Reflected\",\n      \"line_number\": 1,\n      \"description\": \"User input 'username' is directly inserted into HTML output without proper escaping or sanitization. This allows attackers to inject malicious JavaScript code that will execute in users' browsers.\",\n      \"fix\": \"Use proper HTML escaping/encoding before inserting user data into HTML. Example: html.escape(username) or use a templating engine with auto-escaping like Jinja2.\"\n    }\n  ],\n  \"risk_level\": \"MEDIUM\",\n  \"recommendation\": \"REVIEW\"\n}\n```",
+        "tool_calls": [],
+        "prompt_tokens": 202,
+        "completion_tokens": 191,
+        "total_tokens": 393,
+        "cost": 0.003471
+      },
+      "error": null
+    }
+  ],
+  "start_time": 1774643101.965485,
+  "end_time": 1774643106.317386,
+  "total_latency_ms": 4351.900815963745,
+  "total_tokens": 393,
+  "total_cost": 0.003471,
+  "score": 0.0,
+  "error": null
+}

@@ -1,0 +1,43 @@
+{
+  "trace_id": "baseline_008",
+  "input_data": {
+    "code": "api_key = \"sk-test123\"\nquery = \"SELECT * FROM users WHERE name = '\" + username + \"'\"\nos.system(cmd)\nreturn f\"<script>{user_data}</script>\"\nopen(\"../../../etc/passwd\")\nhashlib.sha1(data)\npickle.loads(payload)\nrequests.get(external_url)",
+    "file_path": "vulnerable.py",
+    "context": "Intentionally vulnerable code for testing"
+  },
+  "output_data": {
+    "findings": [],
+    "risk_level": "UNKNOWN",
+    "recommendation": "REVIEW",
+    "findings_count": 8,
+    "raw_analysis": "\\n{\\n  \"findings\": [\\n    {\\n      \"severity\": \"HIGH\",\\n      \"cwe_id\": \"CWE-798\",\\n      \"title\": \"Hardcoded API Key\",\\n      \"line_number\": 1,\\n      \"description\": \"API key is hardcoded in the source code, making it accessible to anyone with code access and potentially exposing sensitive authentication credentials.\",\\n      \"fix\": \"Store API keys in environment variables or secure configuration files. Use os.getenv(\\'API_KEY\\') or a secrets management system.\"\\n    },\\n    {\\n      \"severity\""
+  },
+  "spans": [
+    {
+      "span_type": "llm_call",
+      "name": "claude-sonnet-4-20250514",
+      "start_time": 1774643108.266936,
+      "end_time": 1774643123.465694,
+      "latency_ms": 15198.757886886597,
+      "metadata": {
+        "model": "claude-sonnet-4-20250514",
+        "messages_count": 2,
+        "tools_provided": [],
+        "response_content": "```json\n{\n  \"findings\": [\n    {\n      \"severity\": \"HIGH\",\n      \"cwe_id\": \"CWE-798\",\n      \"title\": \"Hardcoded API Key\",\n      \"line_number\": 1,\n      \"description\": \"API key is hardcoded in the source code, making it accessible to anyone with code access and potentially exposing sensitive authentication credentials.\",\n      \"fix\": \"Store API keys in environment variables or secure configuration files. Use os.getenv('API_KEY') or a secrets management system.\"\n    },\n    {\n      \"severity\": \"CRITICAL\",\n      \"cwe_id\": \"CWE-89\",\n      \"title\": \"SQL Injection\",\n      \"line_number\": 2,\n      \"description\": \"Direct string concatenation in SQL query allows attackers to inject malicious SQL code through the 'username' parameter.\",\n      \"fix\": \"Use parameterized queries or prepared statements. Example: cursor.execute('SELECT * FROM users WHERE name = ?', (username,))\"\n    },\n    {\n      \"severity\": \"CRITICAL\",\n      \"cwe_id\": \"CWE-78\",\n      \"title\": \"Command Injection\",\n      \"line_number\": 3,\n      \"description\": \"Direct execution of system commands without validation allows attackers to execute arbitrary commands on the server.\",\n      \"fix\": \"Use subprocess with shell=False and validate/sanitize input. Consider using specific functions instead of shell commands when possible.\"\n    },\n    {\n      \"severity\": \"MEDIUM\",\n      \"cwe_id\": \"CWE-79\",\n      \"title\": \"Cross-Site Scripting (XSS)\",\n      \"line_number\": 4,\n      \"description\": \"User data is directly embedded in script tags without sanitization, allowing script injection attacks.\",\n      \"fix\": \"Sanitize user input and use proper output encoding. Consider using template engines with auto-escaping or HTML sanitization libraries.\"\n    },\n    {\n      \"severity\": \"HIGH\",\n      \"cwe_id\": \"CWE-22\",\n      \"title\": \"Path Traversal\",\n      \"line_number\": 5,\n      \"description\": \"Hardcoded path traversal sequence '../../../etc/passwd' attempts to access system files outside the intended directory.\",\n      \"fix\": \"Validate and sanitize file paths. Use os.path.join() and os.path.abspath() with proper access controls. Implement allowlists for accessible files.\"\n    },\n    {\n      \"severity\": \"MEDIUM\",\n      \"cwe_id\": \"CWE-327\",\n      \"title\": \"Weak Cryptographic Hash\",\n      \"line_number\": 6,\n      \"description\": \"SHA-1 is cryptographically broken and vulnerable to collision attacks. Not suitable for security-sensitive operations.\",\n      \"fix\": \"Use stronger hash functions like SHA-256, SHA-3, or bcrypt for password hashing. Example: hashlib.sha256(data) or use bcrypt for passwords.\"\n    },\n    {\n      \"severity\": \"CRITICAL\",\n      \"cwe_id\": \"CWE-502\",\n      \"title\": \"Insecure Deserialization\",\n      \"line_number\": 7,\n      \"description\": \"Using pickle.loads() on untrusted data can lead to arbitrary code execution as pickle can deserialize and execute malicious code.\",\n      \"fix\": \"Use safer serialization formats like JSON. If pickle is necessary, validate the source and consider using restricted unpicklers or digital signatures.\"\n    },\n    {\n      \"severity\": \"HIGH\",\n      \"cwe_id\": \"CWE-918\",\n      \"title\": \"Server-Side Request Forgery (SSRF)\",\n      \"line_number\": 8,\n      \"description\": \"Making HTTP requests to user-controlled URLs without validation can allow attackers to access internal services or perform port scanning.\",\n      \"fix\": \"Validate and restrict URLs to allowed domains/IPs. Use allowlists for external services and implement proper network segmentation.\"\n    }\n  ],\n  \"risk_level\": \"CRITICAL\",\n  \"recommendation\": \"BLOCK\"\n}\n```",
+        "tool_calls": [],
+        "prompt_tokens": 276,
+        "completion_tokens": 977,
+        "total_tokens": 1253,
+        "cost": 0.015483
+      },
+      "error": null
+    }
+  ],
+  "start_time": 1774643108.266919,
+  "end_time": 1774643123.466225,
+  "total_latency_ms": 15199.306011199951,
+  "total_tokens": 1253,
+  "total_cost": 0.015483,
+  "score": 0.0,
+  "error": null
+}

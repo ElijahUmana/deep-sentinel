@@ -208,3 +208,39 @@ CREATE TABLE IF NOT EXISTS audit_log (
             return "Ghost CLI not found"
         except subprocess.TimeoutExpired:
             return "Ghost command timed out"
+
+    @staticmethod
+    def fork_database(db_id: str, name: str) -> dict:
+        """
+        Fork the database for safe experimentation.
+        Ghost's key feature: clone schema + data with one command.
+        """
+        result = subprocess.run(
+            ["ghost", "fork", db_id, "--name", name],
+            capture_output=True, text=True, timeout=60
+        )
+        output = result.stdout.strip()
+        # Parse the connection string from output
+        conn_match = None
+        for line in output.split("\n"):
+            if "postgresql://" in line:
+                conn_match = line.split("Connection: ")[-1].strip() if "Connection:" in line else line.strip()
+        return {"output": output, "connection": conn_match}
+
+    @staticmethod
+    def query_database(db_id: str, sql: str) -> str:
+        """Execute SQL directly via Ghost CLI."""
+        result = subprocess.run(
+            ["ghost", "sql", db_id, sql],
+            capture_output=True, text=True, timeout=30
+        )
+        return result.stdout.strip()
+
+    @staticmethod
+    def get_schema(db_id: str) -> str:
+        """Get database schema via Ghost CLI."""
+        result = subprocess.run(
+            ["ghost", "schema", db_id],
+            capture_output=True, text=True, timeout=30
+        )
+        return result.stdout.strip()

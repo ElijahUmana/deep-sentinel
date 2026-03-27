@@ -1,0 +1,4 @@
+iteration	avg_score	avg_structure	avg_findings	avg_risk_level	avg_recommendation	avg_findings_count	avg_raw_analysis	avg_tool_usage	status	description
+baseline	39.7	19.0	0.0	4.0	5.2	11.5	0.0	0.0	keep	Initial baseline
+iter_001	39.7	19.0	0.0	4.0	5.2	11.5	0.0	0.0	skip	No valid candidates
+iter_002	39.7	19.0	0.0	4.0	5.2	11.5	0.0	0.0	skip	No valid candidates

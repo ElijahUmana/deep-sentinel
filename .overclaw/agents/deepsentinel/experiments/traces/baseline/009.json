@@ -1,0 +1,43 @@
+{
+  "trace_id": "baseline_009",
+  "input_data": {
+    "code": "",
+    "file_path": "empty.py",
+    "context": ""
+  },
+  "output_data": {
+    "findings": [],
+    "risk_level": "UNKNOWN",
+    "recommendation": "REVIEW",
+    "findings_count": 0,
+    "raw_analysis": "\\n{\\n  \"findings\": [],\\n  \"risk_level\": \"NONE\",\\n  \"recommendation\": \"APPROVE\"\\n}\\n"
+  },
+  "spans": [
+    {
+      "span_type": "llm_call",
+      "name": "claude-sonnet-4-20250514",
+      "start_time": 1774643109.823667,
+      "end_time": 1774643112.151658,
+      "latency_ms": 2327.991008758545,
+      "metadata": {
+        "model": "claude-sonnet-4-20250514",
+        "messages_count": 2,
+        "tools_provided": [],
+        "response_content": "```json\n{\n  \"findings\": [],\n  \"risk_level\": \"NONE\",\n  \"recommendation\": \"APPROVE\"\n}\n```\n\nThe file `empty.py` contains no code, so there are no security vulnerabilities to analyze. An empty Python file poses no security risk.",
+        "tool_calls": [],
+        "prompt_tokens": 187,
+        "completion_tokens": 68,
+        "total_tokens": 255,
+        "cost": 0.001581
+      },
+      "error": null
+    }
+  ],
+  "start_time": 1774643109.823652,
+  "end_time": 1774643112.152021,
+  "total_latency_ms": 2328.368902206421,
+  "total_tokens": 255,
+  "total_cost": 0.001581,
+  "score": 0.0,
+  "error": null
+}

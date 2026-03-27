@@ -1,0 +1,43 @@
+{
+  "trace_id": "baseline_000",
+  "input_data": {
+    "code": "password = \"admin123\"\napi_key = \"sk-1234567890abcdef\"\ndb_connection = \"mysql://root:password@localhost/db\"",
+    "file_path": "config.py",
+    "context": "Configuration file for web application"
+  },
+  "output_data": {
+    "findings": [],
+    "risk_level": "UNKNOWN",
+    "recommendation": "REVIEW",
+    "findings_count": 3,
+    "raw_analysis": "\\n{\\n  \"findings\": [\\n    {\\n      \"severity\": \"CRITICAL\",\\n      \"cwe_id\": \"CWE-798\",\\n      \"title\": \"Hardcoded Password in Configuration\",\\n      \"line_number\": 1,\\n      \"description\": \"The password \\'admin123\\' is hardcoded directly in the source code. This creates a significant security risk as the credentials are exposed to anyone with access to the codebase and cannot be easily rotated without code changes.\",\\n      \"fix\": \"Move the password to environment variables or a secure configura"
+  },
+  "spans": [
+    {
+      "span_type": "llm_call",
+      "name": "claude-sonnet-4-20250514",
+      "start_time": 1774643101.965176,
+      "end_time": 1774643109.821358,
+      "latency_ms": 7856.181859970093,
+      "metadata": {
+        "model": "claude-sonnet-4-20250514",
+        "messages_count": 2,
+        "tools_provided": [],
+        "response_content": "```json\n{\n  \"findings\": [\n    {\n      \"severity\": \"CRITICAL\",\n      \"cwe_id\": \"CWE-798\",\n      \"title\": \"Hardcoded Password in Configuration\",\n      \"line_number\": 1,\n      \"description\": \"The password 'admin123' is hardcoded directly in the source code. This creates a significant security risk as the credentials are exposed to anyone with access to the codebase and cannot be easily rotated without code changes.\",\n      \"fix\": \"Move the password to environment variables or a secure configuration management system. Use os.environ.get('PASSWORD') or a secrets management service.\"\n    },\n    {\n      \"severity\": \"HIGH\",\n      \"cwe_id\": \"CWE-798\",\n      \"title\": \"Hardcoded API Key in Configuration\",\n      \"line_number\": 2,\n      \"description\": \"The API key 'sk-1234567890abcdef' is hardcoded in the source code. This exposes the API key to unauthorized access and makes key rotation difficult.\",\n      \"fix\": \"Store the API key in environment variables or use a secure key management system. Replace with os.environ.get('API_KEY') or similar secure method.\"\n    },\n    {\n      \"severity\": \"CRITICAL\",\n      \"cwe_id\": \"CWE-798\",\n      \"title\": \"Hardcoded Database Credentials in Connection String\",\n      \"line_number\": 3,\n      \"description\": \"The database connection string contains hardcoded credentials ('root:password'). This exposes database authentication details and creates a significant security vulnerability.\",\n      \"fix\": \"Use environment variables for database credentials or a secure configuration file with restricted access. Consider using connection pooling with secure credential management.\"\n    }\n  ],\n  \"risk_level\": \"CRITICAL\",\n  \"recommendation\": \"BLOCK\"\n}\n```",
+        "tool_calls": [],
+        "prompt_tokens": 230,
+        "completion_tokens": 440,
+        "total_tokens": 670,
+        "cost": 0.00729
+      },
+      "error": null
+    }
+  ],
+  "start_time": 1774643101.965167,
+  "end_time": 1774643109.8218791,
+  "total_latency_ms": 7856.712102890015,
+  "total_tokens": 670,
+  "total_cost": 0.00729,
+  "score": 0.0,
+  "error": null
+}

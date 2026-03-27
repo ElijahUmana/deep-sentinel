@@ -1,0 +1,185 @@
+{
+  "agent_description": "DeepSentinel is a security vulnerability scanner agent that analyzes source code for common security weaknesses. It uses an LLM to identify vulnerabilities based on CWE (Common Weakness Enumeration) standards, providing detailed findings with severity levels and actionable recommendations for code security assessment.",
+  "agent_path": "/Users/elijahumana/deep-agents-hackathon/src/overclaw_agent.py",
+  "input_schema": {
+    "code": {
+      "type": "string",
+      "description": "The source code to analyze for security vulnerabilities"
+    },
+    "file_path": {
+      "type": "string",
+      "description": "Path or name of the file being analyzed"
+    },
+    "context": {
+      "type": "string",
+      "description": "Additional context about the code or project"
+    }
+  },
+  "output_fields": {
+    "findings": {
+      "type": "text",
+      "description": "Array of vulnerability findings with details like severity, CWE ID, title, line number, description, and fix",
+      "weight": 16,
+      "importance": "critical",
+      "eval_mode": "non_empty"
+    },
+    "risk_level": {
+      "type": "enum",
+      "description": "Overall risk assessment of the analyzed code",
+      "weight": 18,
+      "importance": "critical",
+      "values": [
+        "CRITICAL",
+        "HIGH",
+        "MEDIUM",
+        "LOW",
+        "NONE",
+        "UNKNOWN"
+      ],
+      "partial_credit": true,
+      "partial_score": 4
+    },
+    "recommendation": {
+      "type": "enum",
+      "description": "Recommended action based on security analysis",
+      "weight": 18,
+      "importance": "critical",
+      "values": [
+        "BLOCK",
+        "REVIEW",
+        "APPROVE"
+      ],
+      "partial_credit": true,
+      "partial_score": 4
+    },
+    "findings_count": {
+      "type": "number",
+      "description": "Number of security vulnerabilities found",
+      "weight": 12,
+      "importance": "important",
+      "range": [
+        0,
+        100
+      ],
+      "tolerance_bands": [
+        {
+          "within": 1,
+          "score_pct": 1.0
+        },
+        {
+          "within": 2,
+          "score_pct": 0.8
+        },
+        {
+          "within": 3,
+          "score_pct": 0.5
+        },
+        {
+          "within": 5,
+          "score_pct": 0.25
+        }
+      ]
+    },
+    "raw_analysis": {
+      "type": "text",
+      "description": "Fallback field containing truncated raw analysis when JSON parsing fails",
+      "weight": 6,
+      "importance": "minor",
+      "eval_mode": "skip"
+    }
+  },
+  "structure_weight": 20,
+  "total_points": 100,
+  "optimizable_elements": [
+    "system prompt instructions",
+    "LLM model selection",
+    "run function - agent orchestration: JSON parsing logic, fallback handling, output formatting",
+    "input formatting and context preparation"
+  ],
+  "fixed_elements": [
+    "call_llm tool implementation",
+    "OverClaw tracing integration",
+    "CWE vulnerability categories",
+    "JSON parsing libraries"
+  ],
+  "tool_config": {
+    "expected_tools": [
+      "call_llm"
+    ],
+    "dependencies": [],
+    "param_constraints": {
+      "call_llm": {
+        "model": [
+          "claude-sonnet-4-20250514"
+        ]
+      }
+    }
+  },
+  "tool_usage_weight": 10,
+  "consistency_rules": [
+    {
+      "field_a": "risk_level",
+      "field_b": "recommendation",
+      "type": "correlation",
+      "description": "CRITICAL/HIGH risk should correlate with BLOCK recommendation, while LOW/NONE should correlate with APPROVE",
+      "penalty": 5.0
+    },
+    {
+      "field_a": "findings_count",
+      "field_b": "risk_level",
+      "type": "correlation",
+      "description": "Higher findings count should correlate with higher risk levels",
+      "penalty": 3.0
+    }
+  ],
+  "policy": {
+    "purpose": "Analyze source code for security vulnerabilities using CWE standards and provide risk assessment with actionable recommendations.",
+    "domain_rules": [
+      "Must check for 8 specific CWE categories: 798, 89, 78, 79, 22, 327, 502, 918 (inferred)",
+      "CRITICAL/HIGH risk should correlate with BLOCK recommendation (inferred)",
+      "LOW/NONE risk should correlate with APPROVE recommendation (inferred)",
+      "Higher findings count should correlate with higher risk levels (inferred)"
+    ],
+    "domain_edge_cases": [
+      {
+        "scenario": "JSON parsing fails from LLM response",
+        "correct_handling": "Fall back to regex CWE pattern matching and return raw analysis (inferred)"
+      },
+      {
+        "scenario": "Empty or invalid code input",
+        "correct_handling": "Return NONE risk level and APPROVE recommendation (inferred)"
+      },
+      {
+        "scenario": "Uncertain vulnerability assessment",
+        "correct_handling": "Default to REVIEW recommendation (inferred)"
+      }
+    ],
+    "terminology": {
+      "CWE": "Common Weakness Enumeration standard for security vulnerabilities",
+      "Risk levels": "CRITICAL > HIGH > MEDIUM > LOW > NONE severity hierarchy",
+      "Recommendations": "BLOCK (reject), REVIEW (manual inspection), APPROVE (accept)"
+    },
+    "output_constraints": [
+      "Risk level must be enum: CRITICAL, HIGH, MEDIUM, LOW, NONE, UNKNOWN",
+      "Recommendation must be enum: BLOCK, REVIEW, APPROVE",
+      "Findings count must be 0-100 and match findings array length",
+      "Raw analysis truncated to 500 characters when used"
+    ],
+    "tool_requirements": [
+      "Must use claude-sonnet-4-20250514 model exclusively",
+      "System prompt must specify CWE categories and JSON structure requirements",
+      "User message must include structured file path, context, and code"
+    ],
+    "decision_mapping": [
+      "JSON parsing success \u2192 return structured findings with calculated count",
+      "JSON parsing failure \u2192 return empty findings with regex count and raw analysis",
+      "Missing data \u2192 use defaults: risk_level=UNKNOWN, recommendation=REVIEW"
+    ],
+    "quality_expectations": [
+      "Findings must include severity, CWE ID, title, line number, description, and fix",
+      "Risk level and recommendation should correlate logically",
+      "Findings count must accurately reflect discovered vulnerabilities",
+      "Fallback handling must be robust for malformed LLM responses"
+    ]
+  }
+}

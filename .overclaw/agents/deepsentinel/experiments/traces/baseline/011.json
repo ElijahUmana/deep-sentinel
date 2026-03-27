@@ -1,0 +1,43 @@
+{
+  "trace_id": "baseline_011",
+  "input_data": {
+    "code": "user_input = request.form['data']\nif validate_input(user_input):\n    result = process_safely(user_input)\nelse:\n    return error_response()",
+    "file_path": "handler.py",
+    "context": "Input validation and processing"
+  },
+  "output_data": {
+    "findings": [],
+    "risk_level": "UNKNOWN",
+    "recommendation": "REVIEW",
+    "findings_count": 3,
+    "raw_analysis": "\\n{\\n  \"findings\": [\\n    {\\n      \"severity\": \"MEDIUM\",\\n      \"cwe_id\": \"CWE-79\",\\n      \"title\": \"Potential Cross-Site Scripting (XSS) vulnerability\",\\n      \"line_number\": 1,\\n      \"description\": \"User input from request.form is accessed without proper sanitization or encoding. If this data is later rendered in HTML responses without proper escaping, it could lead to XSS attacks.\",\\n      \"fix\": \"Implement proper input sanitization and output encoding. Use framework-specific methods like ht"
+  },
+  "spans": [
+    {
+      "span_type": "llm_call",
+      "name": "claude-sonnet-4-20250514",
+      "start_time": 1774643110.983833,
+      "end_time": 1774643118.914112,
+      "latency_ms": 7930.279016494751,
+      "metadata": {
+        "model": "claude-sonnet-4-20250514",
+        "messages_count": 2,
+        "tools_provided": [],
+        "response_content": "```json\n{\n  \"findings\": [\n    {\n      \"severity\": \"MEDIUM\",\n      \"cwe_id\": \"CWE-79\",\n      \"title\": \"Potential Cross-Site Scripting (XSS) vulnerability\",\n      \"line_number\": 1,\n      \"description\": \"User input from request.form is accessed without proper sanitization or encoding. If this data is later rendered in HTML responses without proper escaping, it could lead to XSS attacks.\",\n      \"fix\": \"Implement proper input sanitization and output encoding. Use framework-specific methods like html.escape() or template auto-escaping.\"\n    },\n    {\n      \"severity\": \"MEDIUM\", \n      \"cwe_id\": \"CWE-20\",\n      \"title\": \"Insufficient input validation\",\n      \"line_number\": 2,\n      \"description\": \"The validate_input() function is called but its implementation is not visible. Insufficient validation could allow malicious input to bypass security controls.\",\n      \"fix\": \"Ensure validate_input() implements comprehensive validation including: input length limits, character whitelisting, format validation, and sanitization of special characters.\"\n    },\n    {\n      \"severity\": \"LOW\",\n      \"cwe_id\": \"CWE-209\",\n      \"title\": \"Potentially inadequate error handling\",\n      \"line_number\": 5,\n      \"description\": \"Generic error_response() may not provide sufficient information for debugging while potentially leaking sensitive information to attackers.\",\n      \"fix\": \"Implement proper error handling that logs detailed errors securely while returning generic error messages to users. Avoid exposing internal system details.\"\n    }\n  ],\n  \"risk_level\": \"MEDIUM\",\n  \"recommendation\": \"REVIEW\"\n}\n```",
+        "tool_calls": [],
+        "prompt_tokens": 233,
+        "completion_tokens": 413,
+        "total_tokens": 646,
+        "cost": 0.006894
+      },
+      "error": null
+    }
+  ],
+  "start_time": 1774643110.983819,
+  "end_time": 1774643118.914623,
+  "total_latency_ms": 7930.804014205933,
+  "total_tokens": 646,
+  "total_cost": 0.006894,
+  "score": 0.0,
+  "error": null
+}

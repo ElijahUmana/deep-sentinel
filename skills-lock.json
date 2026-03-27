@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "deepsentinel": {
+      "source": "ElijahUmana/deep-sentinel",
+      "sourceType": "github",
+      "computedHash": "62e39f547147831ae23c3c6c25597e1720bac87abe8fdc89831fa38754ea1b28"
+    }
+  }
+}
