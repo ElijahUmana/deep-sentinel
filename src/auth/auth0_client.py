@@ -217,7 +217,7 @@ class Auth0Client:
         Use for: creating CRITICAL security tickets, auto-fixing code,
         revoking access tokens, modifying security configurations.
         """
-        if not self.connected or not self.user_id or (self.user_id and self.user_id.startswith("demo|")):
+        if not self.connected or not self.user_id or (self.user_id and (self.user_id.startswith("demo|") or self.user_id.startswith("auth0|device"))):
             print(f"[Auth0 CIBA] Requesting approval: {action} on {resource}")
             print(f"[Auth0 CIBA] In production: push notification sent to user's device")
             print(f"[Auth0 CIBA] User reviews action and approves/denies on their phone")
