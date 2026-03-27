@@ -1,8 +1,12 @@
 # DeepSentinel
 
-**Autonomous multi-source security intelligence that finds what scanners miss.**
+**Cross-source security intelligence that finds what scanners miss.**
 
-DeepSentinel is an AI agent that pulls real-time data from GitHub, Slack, and your codebase simultaneously, correlates findings across all sources, and performs deep security analysis that no single-source scanner can match.
+> *28% of critical security incidents originate OUTSIDE code repositories — in Slack, Jira, and collaboration tools. No existing scanner connects the dots.* — GitGuardian State of Secrets Sprawl 2026
+
+DeepSentinel is an autonomous AI agent that correlates GitHub PRs, Issues, review comments, Slack discussions, and codebase architecture to find security risks that live between your tools.
+
+**See it in action:** [Security review posted on a real PR](https://github.com/ElijahUmana/demo-vulnerable-app/pull/1) | [Install as a skill](https://codeables.dev/skills/ElijahUmana/deepsentinel)
 
 ## The Problem
 
