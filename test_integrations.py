@@ -21,16 +21,31 @@ async def test_all():
     print("  DEEPSENTINEL — Integration Verification")
     print("=" * 60 + "\n")
 
-    # 1. AUTH0
-    print("[1/7] Auth0...")
+    # 1. AUTH0 — All 4 Pillars
+    print("[1/7] Auth0 (4 pillars)...")
     try:
         from src.auth.auth0_client import Auth0Client
+        import httpx
         auth = Auth0Client()
+        pillars = []
         if auth.connected:
-            # Test Management API token
-            import httpx
             async with httpx.AsyncClient() as client:
-                resp = await client.post(
+                # Pillar 1: Device Flow (user authentication)
+                device_resp = await client.post(
+                    f"https://{auth.domain}/oauth/device/code",
+                    data={
+                        "client_id": auth.device_client_id,
+                        "scope": "openid profile email",
+                        "audience": auth.audience,
+                    },
+                )
+                if device_resp.status_code == 200 and "device_code" in device_resp.json():
+                    pillars.append("DeviceFlow")
+                else:
+                    pillars.append("DeviceFlow:FAIL")
+
+                # Pillar 2: Token Vault (via Management API client_credentials)
+                mgmt_resp = await client.post(
                     f"https://{auth.domain}/oauth/token",
                     json={
                         "client_id": auth.client_id,
@@ -39,10 +54,37 @@ async def test_all():
                         "grant_type": "client_credentials",
                     },
                 )
-                if resp.status_code == 200:
-                    results["auth0"] = "PASS — Management API token obtained"
+                if mgmt_resp.status_code == 200 and "access_token" in mgmt_resp.json():
+                    scopes = mgmt_resp.json().get("scope", "")
+                    has_vault_scopes = "read:users" in scopes and "read:user_idp_tokens" in scopes
+                    pillars.append("TokenVault" if has_vault_scopes else "TokenVault:PARTIAL")
                 else:
-                    results["auth0"] = f"WARN — Token request returned {resp.status_code}"
+                    pillars.append("TokenVault:FAIL")
+
+                # Pillar 3: CIBA (endpoint responds, needs real user for full flow)
+                ciba_resp = await client.post(
+                    f"https://{auth.domain}/bc-authorize",
+                    data={
+                        "client_id": auth.client_id,
+                        "client_secret": auth.client_secret,
+                        "scope": "openid",
+                        "binding_message": "test",
+                        "login_hint": '{"format":"iss_sub","iss":"https://' + auth.domain + '/","sub":"auth0|test"}',
+                    },
+                )
+                ciba_data = ciba_resp.json()
+                # "unknown_user_id" means endpoint is configured and reachable
+                if ciba_data.get("error") == "unknown_user_id" or "auth_req_id" in ciba_data:
+                    pillars.append("CIBA")
+                else:
+                    pillars.append(f"CIBA:FAIL({ciba_data.get('error', 'unknown')})")
+
+                # Pillar 4: FGA check (permissive mode without FGA_STORE_ID)
+                fga_result = await auth.fga_check("user:test", "can_view", "repo", "test")
+                pillars.append("FGA" if fga_result else "FGA:DENIED")
+
+            all_pass = all("FAIL" not in p for p in pillars)
+            results["auth0"] = f"{'PASS' if all_pass else 'PARTIAL'} — {', '.join(pillars)}"
         else:
             results["auth0"] = "SKIP — No AUTH0_DOMAIN configured"
     except Exception as e:

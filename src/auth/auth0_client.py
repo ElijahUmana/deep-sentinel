@@ -18,12 +18,25 @@ from openfga_sdk.client import ClientCheckRequest
 
 
 class Auth0Client:
-    """Full Auth0 for AI Agents integration — 4 pillars."""
+    """Full Auth0 for AI Agents integration — 4 pillars.
+
+    Uses two Auth0 applications by design:
+    - Confidential app (AUTH0_CLIENT_ID): client_credentials, CIBA, Token Vault
+    - Native/public app (AUTH0_DEVICE_CLIENT_ID): device authorization flow
+
+    Device Code requires token_endpoint_auth_method=none (public client),
+    while CIBA and client_credentials require client authentication. Auth0
+    enforces this separation, so a split-app architecture is correct.
+    """
 
     def __init__(self):
         self.domain = os.environ.get("AUTH0_DOMAIN", "")
         self.client_id = os.environ.get("AUTH0_CLIENT_ID", "")
         self.client_secret = os.environ.get("AUTH0_CLIENT_SECRET", "")
+        # Separate native app for device flow (public client, no secret)
+        self.device_client_id = os.environ.get(
+            "AUTH0_DEVICE_CLIENT_ID", self.client_id
+        )
         self.audience = os.environ.get("AUTH0_AUDIENCE", "https://deepsentinel.local/api")
         self._token_cache = {}
         self.user_id = None
@@ -59,21 +72,29 @@ class Auth0Client:
     # ===========================
 
     async def device_flow_login(self) -> dict:
-        """Authenticate user via device authorization flow (CLI-friendly)."""
+        """Authenticate user via device authorization flow (CLI-friendly).
+
+        Uses the dedicated Native app (AUTH0_DEVICE_CLIENT_ID) which has
+        token_endpoint_auth_method=none as required by the device code grant.
+        """
         if not self.connected:
             return {"status": "skipped", "reason": "Auth0 not configured"}
 
         async with httpx.AsyncClient() as client:
-            # Request device code
+            # Request device code using the native/public app
             resp = await client.post(
                 f"https://{self.domain}/oauth/device/code",
                 data={
-                    "client_id": self.client_id,
+                    "client_id": self.device_client_id,
                     "scope": "openid profile email offline_access",
                     "audience": self.audience,
                 },
             )
             data = resp.json()
+
+            if "error" in data:
+                return {"status": "error", "error": data["error"],
+                        "description": data.get("error_description", "")}
 
             verification_url = data.get("verification_uri_complete", data.get("verification_uri", ""))
             user_code = data.get("user_code", "")
@@ -91,7 +112,7 @@ class Auth0Client:
                     data={
                         "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
                         "device_code": device_code,
-                        "client_id": self.client_id,
+                        "client_id": self.device_client_id,
                     },
                 )
                 token_data = token_resp.json()
@@ -191,14 +212,21 @@ class Auth0Client:
             # In demo mode, auto-approve after showing the intent
             return True
 
+        import json as _json
+
         async with httpx.AsyncClient() as client:
-            # Initiate CIBA request
+            # Initiate CIBA request — Auth0 requires JSON-formatted login_hint
+            login_hint = _json.dumps({
+                "format": "iss_sub",
+                "iss": f"https://{self.domain}/",
+                "sub": self.user_id,
+            })
             resp = await client.post(
                 f"https://{self.domain}/bc-authorize",
                 data={
                     "client_id": self.client_id,
                     "client_secret": self.client_secret,
-                    "login_hint": f"sub:{self.user_id}",
+                    "login_hint": login_hint,
                     "binding_message": f"DeepSentinel: {action} on {resource}",
                     "scope": "openid",
                     "audience": self.audience,
@@ -350,17 +378,23 @@ class Auth0Client:
                 "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
             }
 
-        # Real device flow — request the code
+        # Real device flow — request the code using the native app
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 f"https://{self.domain}/oauth/device/code",
                 data={
-                    "client_id": self.client_id,
+                    "client_id": self.device_client_id,
                     "scope": "openid profile email offline_access",
                     "audience": self.audience,
                 },
             )
             data = resp.json()
+
+            if "error" in data:
+                print(f"  Device flow error: {data.get('error_description', data['error'])}")
+                self.user_id = f"auth0|device-{self.device_client_id[:8]}"
+                return {"status": "error", "error": data["error"]}
+
             verification_url = data.get("verification_uri_complete", data.get("verification_uri", ""))
             user_code = data.get("user_code", "")
 
@@ -369,7 +403,7 @@ class Auth0Client:
             print("  (In production, user authenticates here; demo continues with client credentials)")
 
             # For demo, use client credentials instead of blocking
-            self.user_id = f"auth0|device-{self.client_id[:8]}"
+            self.user_id = f"auth0|device-{self.device_client_id[:8]}"
             return {
                 "status": "demonstrated",
                 "user_id": self.user_id,
