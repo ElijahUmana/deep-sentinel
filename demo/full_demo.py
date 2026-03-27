@@ -653,20 +653,25 @@ async def demo():
 
     # Run an experimental query in the fork (safe -- doesn't touch main DB)
     if fork_conn or fork_output:
-        # Extract fork DB ID from output if possible, or use naming convention
-        fork_db_id = f"experiment-{scan_id[:6]}"
-        print(f"\n  [Ghost Fork] Running experimental query in fork (safe -- main DB untouched)...")
-        experiment_result = GhostDB.experiment_in_fork(
-            fork_db_id,
-            "SELECT COUNT(*) as finding_count, "
-            "UPPER(severity) as severity "
-            "FROM vulnerabilities GROUP BY UPPER(severity) ORDER BY finding_count DESC"
-        )
-        if experiment_result and not experiment_result.startswith("ERROR"):
-            print(f"  [Ghost Fork] Experiment result:")
-            for line in experiment_result.split("\n")[:5]:
-                if line.strip():
-                    print(f"    {line.strip()}")
+        # Extract the actual Ghost fork ID from the output (e.g. "ID: irakrp9ts2")
+        fork_db_id = None
+        for line in fork_output.split("\n"):
+            if line.strip().startswith("ID:"):
+                fork_db_id = line.strip().split("ID:")[-1].strip()
+                break
+        if fork_db_id:
+            print(f"\n  [Ghost Fork] Running experimental query in fork {fork_db_id} (safe -- main DB untouched)...")
+            experiment_result = GhostDB.experiment_in_fork(
+                fork_db_id,
+                "SELECT COUNT(*) as finding_count, "
+                "UPPER(severity) as severity "
+                "FROM vulnerabilities GROUP BY UPPER(severity) ORDER BY finding_count DESC"
+            )
+            if experiment_result and not experiment_result.startswith("ERROR"):
+                print(f"  [Ghost Fork] Experiment result:")
+                for line in experiment_result.split("\n")[:5]:
+                    if line.strip():
+                        print(f"    {line.strip()}")
 
     # Show all Ghost databases including forks
     print(f"\n  [Ghost] Running: ghost list")

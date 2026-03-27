@@ -396,25 +396,48 @@ CREATE TABLE IF NOT EXISTS audit_log (
             return {"tables": [], "note": "Schema not available"}
 
         # Parse schema to understand available tables and columns
+        # Ghost's schema format:
+        #   TABLE: vulnerabilities
+        #   id             SERIAL PRIMARY KEY
+        #   severity       TEXT NOT NULL
+        #   cwe_id         TEXT
+        # Also handles: "Table:" prefix, CREATE TABLE, and pipe-delimited formats
         tables = []
         current_table = None
         for line in schema.split("\n"):
             stripped = line.strip()
             if not stripped:
                 continue
-            # Ghost schema format uses table headers and column listings
-            if stripped.startswith("Table:") or stripped.startswith("CREATE TABLE"):
-                table_name = stripped.split()[-1].strip("(").strip('"').strip("'")
-                current_table = {"name": table_name, "columns": []}
-                tables.append(current_table)
-            elif current_table and "|" in stripped:
-                # Column definition line
-                parts = [p.strip() for p in stripped.split("|")]
-                if len(parts) >= 2:
-                    current_table["columns"].append({
-                        "name": parts[0],
-                        "type": parts[1] if len(parts) > 1 else "unknown",
-                    })
+
+            # Detect table header lines (case-insensitive)
+            stripped_upper = stripped.upper()
+            if stripped_upper.startswith("TABLE:") or stripped_upper.startswith("CREATE TABLE"):
+                # Extract table name: "TABLE: vulnerabilities" -> "vulnerabilities"
+                table_name = stripped.split(":")[-1].strip() if ":" in stripped else stripped.split()[-1]
+                table_name = table_name.strip("(").strip('"').strip("'").strip()
+                if table_name and table_name.upper() not in ("TABLE", "CREATE"):
+                    current_table = {"name": table_name, "columns": []}
+                    tables.append(current_table)
+            elif current_table and not stripped_upper.startswith(("DATABASE:", "VIEW:", "INDEX ")):
+                # Column definition line — either pipe-delimited or space-delimited
+                if "|" in stripped:
+                    parts = [p.strip() for p in stripped.split("|")]
+                    if len(parts) >= 2:
+                        current_table["columns"].append({
+                            "name": parts[0],
+                            "type": parts[1] if len(parts) > 1 else "unknown",
+                        })
+                else:
+                    # Space-delimited: "severity  TEXT NOT NULL"
+                    parts = stripped.split()
+                    if len(parts) >= 2 and not parts[0].startswith(("--", "#", "//")):
+                        current_table["columns"].append({
+                            "name": parts[0],
+                            "type": " ".join(parts[1:]),
+                        })
+            elif stripped_upper.startswith("VIEW:"):
+                # Stop parsing into current table when we hit views
+                current_table = None
 
         return {
             "tables": tables,

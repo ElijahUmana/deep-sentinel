@@ -6,7 +6,7 @@
 
 DeepSentinel is an autonomous AI agent that correlates GitHub PRs, Issues, review comments, Slack discussions, and codebase architecture to find security risks that live between your tools.
 
-**See it in action:** [Security review posted on a real PR](https://github.com/ElijahUmana/demo-vulnerable-app/pull/1) | [Install as a skill](https://codeables.dev/skills/ElijahUmana/deepsentinel)
+**See it in action:** [Security review posted on a real PR](https://github.com/ElijahUmana/demo-vulnerable-app/pull/1) | [Install as a skill](Install: npx skills add ElijahUmana/deep-sentinel --skill deepsentinel)
 
 ## The Problem
 

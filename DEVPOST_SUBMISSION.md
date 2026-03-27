@@ -62,7 +62,7 @@ Python, Auth0, Airbyte, Macroscope, Ghost, TrueFoundry, Aerospike, Overmind/Over
 ## Links
 - **GitHub**: https://github.com/ElijahUmana/deep-sentinel
 - **Demo repo**: https://github.com/ElijahUmana/demo-vulnerable-app
-- **Install skill**: `npx @senso-ai/shipables install ElijahUmana/deepsentinel`
+- **Install skill**: `npx skills add ElijahUmana/deep-sentinel --skill deepsentinel`
 
 ## Sponsor Challenges (Select ALL)
 - Best Use of Auth0 for AI Agents
