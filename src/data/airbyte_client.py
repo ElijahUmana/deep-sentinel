@@ -286,9 +286,7 @@ class AirbyteDataLayer:
             return await self._github_api_file_fallback(owner, repo, path, ref)
 
         try:
-            params = {"owner": owner, "repo": repo, "path": path}
-            if ref:
-                params["ref"] = ref
+            params = {"owner": owner, "repo": repo, "path": path, "ref": ref or "HEAD"}
             data = await self._github_execute("file_content", "get", params)
             if data is None:
                 return await self._github_api_file_fallback(owner, repo, path, ref)
