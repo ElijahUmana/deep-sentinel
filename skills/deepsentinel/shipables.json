@@ -1,0 +1,13 @@
+{
+  "name": "deepsentinel",
+  "version": "1.0.0",
+  "description": "Autonomous multi-source security intelligence agent. Scans GitHub PRs for vulnerabilities using cross-source context from Slack and codebase architecture. Finds risks that single-source scanners miss by correlating data across tools.",
+  "author": {
+    "name": "ElijahUmana",
+    "github": "ElijahUmana"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/ElijahUmana/deep-sentinel",
+  "categories": ["security"],
+  "keywords": ["security", "vulnerability-scanning", "github", "slack", "cross-source", "pr-review", "sast"]
+}
