@@ -252,9 +252,79 @@ CREATE TABLE IF NOT EXISTS audit_log (
 
     @staticmethod
     def get_schema(db_id: str) -> str:
-        """Get database schema via Ghost CLI."""
+        """Get database schema via Ghost CLI.
+
+        Ghost returns the schema in a format optimized for LLM consumption --
+        the agent uses this to understand what tables exist, what columns are
+        available, and how to construct queries WITHOUT hardcoding SQL.
+        This is a key Ghost differentiator: the schema IS the agent's context.
+        """
         result = subprocess.run(
             ["ghost", "schema", db_id],
             capture_output=True, text=True, timeout=30
         )
         return result.stdout.strip()
+
+    @staticmethod
+    def agent_introspect(db_id: str) -> dict:
+        """Agent reads its own schema to decide what to query.
+
+        This demonstrates Ghost's unique value for agentic applications:
+        instead of hardcoding SQL, the agent reads the schema, understands
+        the structure, and dynamically builds queries. This is impossible
+        with vanilla Postgres -- Ghost's LLM-optimized schema format is
+        designed for this exact pattern.
+        """
+        schema = GhostDB.get_schema(db_id)
+        if not schema:
+            return {"tables": [], "note": "Schema not available"}
+
+        # Parse schema to understand available tables and columns
+        tables = []
+        current_table = None
+        for line in schema.split("\n"):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            # Ghost schema format uses table headers and column listings
+            if stripped.startswith("Table:") or stripped.startswith("CREATE TABLE"):
+                table_name = stripped.split()[-1].strip("(").strip('"').strip("'")
+                current_table = {"name": table_name, "columns": []}
+                tables.append(current_table)
+            elif current_table and "|" in stripped:
+                # Column definition line
+                parts = [p.strip() for p in stripped.split("|")]
+                if len(parts) >= 2:
+                    current_table["columns"].append({
+                        "name": parts[0],
+                        "type": parts[1] if len(parts) > 1 else "unknown",
+                    })
+
+        return {
+            "tables": tables,
+            "raw_schema": schema,
+            "table_count": len(tables),
+            "note": "Agent-readable schema from Ghost CLI",
+        }
+
+    @staticmethod
+    def experiment_in_fork(fork_db_id: str, experiment_sql: str) -> str:
+        """Run experimental SQL in a forked database.
+
+        Ghost's fork-before-experiment pattern: the agent forks the DB,
+        runs potentially destructive queries (DELETE, UPDATE, schema changes)
+        in the fork, observes the results, and only applies changes to the
+        main DB if the experiment succeeds. The fork is disposable.
+        """
+        print(f"[Ghost Fork] Running experiment in forked DB {fork_db_id}...")
+        result = subprocess.run(
+            ["ghost", "sql", fork_db_id, experiment_sql],
+            capture_output=True, text=True, timeout=30,
+        )
+        output = result.stdout.strip()
+        if result.returncode != 0:
+            error = result.stderr.strip()
+            print(f"[Ghost Fork] Experiment failed: {error}")
+            return f"ERROR: {error}"
+        print(f"[Ghost Fork] Experiment result: {output[:200]}")
+        return output
