@@ -418,6 +418,94 @@ async def demo():
     for sev in ["CRITICAL", "HIGH", "MEDIUM", "LOW"]:
         if sev in severity_counts:
             print(f"    {sev}: {severity_counts[sev]}")
+
+    # Cache findings in Aerospike for secondary index queries
+    for i, f in enumerate(findings):
+        fid = f.get("cwe_id", f"finding-{i}")
+        cache.cache_finding(f"{scan_id}-{fid}", f)
+
+    # Query cached findings by severity (demonstrates secondary index value)
+    cached_critical = cache.query_by_severity("CRITICAL")
+    cached_high = cache.query_by_severity("HIGH")
+    if cached_critical or cached_high:
+        print(f"  [Aerospike] Cached findings queryable by severity: "
+              f"{len(cached_critical)} CRITICAL, {len(cached_high)} HIGH")
+    print()
+
+    # --- RISK SCORING (critique #5) ---
+    # Re-rank findings by composite risk score using cross-source context
+    print(f"  [Risk Scorer] Re-ranking {len(findings)} findings by composite risk score...")
+    print(f"  [Risk Scorer] Factors: code severity + deferral penalty + history + architecture")
+
+    # Build architecture context for risk scoring
+    architecture_ctx = {}
+    for f_item in all_files:
+        ctx = await macroscope.get_module_context(f_item["path"])
+        architecture_ctx[f_item["path"]] = ctx
+
+    # Historical patterns for risk scoring
+    historical_patterns = [
+        {"cwe_id": "CWE-89", "count": 3, "last_seen": "2026-02-15"},
+        {"cwe_id": "CWE-798", "count": 2, "last_seen": "2026-01-20"},
+        {"cwe_id": "CWE-78", "count": 1, "last_seen": "2026-03-01"},
+    ]
+
+    scored_findings = rank_findings_by_risk(
+        findings, cross_source_correlations, historical_patterns, architecture_ctx
+    )
+
+    # Show the top risk-scored findings with composite breakdown
+    print(f"\n  [Risk Scorer] TOP RISK-SCORED FINDINGS (re-ranked by composite score):")
+    print(f"  {'':>2}{'#':<3} {'Score':>5} {'Severity':<10} {'CWE':<10} {'Title':<40}")
+    print(f"  {'-'*75}")
+    for i, sf in enumerate(scored_findings[:5]):
+        risk = sf.get("risk_score", {})
+        composite = risk.get("composite_score", 0)
+        code_sev = sf.get("severity", "?")
+        cwe = sf.get("cwe_id", "?")
+        title = sf.get("title", "Unknown")[:38]
+        print(f"  {'':>2}{i+1:<3} {composite:>5.1f} {code_sev:<10} {cwe:<10} {title}")
+
+        # Show score breakdown for top 3
+        if i < 3:
+            code_score = risk.get("code_severity_score", 0)
+            deferral = risk.get("deferral_penalty", 0)
+            hist_freq = risk.get("historical_frequency", 0)
+            arch_mult = risk.get("architectural_multiplier", 1.0)
+            related = risk.get("related_correlations", 0)
+
+            breakdown_parts = [f"code={code_score}"]
+            if deferral > 0:
+                breakdown_parts.append(f"deferral=+{deferral}")
+            if hist_freq > 0:
+                breakdown_parts.append(f"history=+{min(hist_freq*2, 20)}")
+            if arch_mult != 1.0:
+                breakdown_parts.append(f"arch=x{arch_mult}")
+            if related > 0:
+                breakdown_parts.append(f"cross-source={related} refs")
+
+            print(f"  {'':>6}Breakdown: {' | '.join(breakdown_parts)}")
+
+            explanation = risk.get("explanation", "")
+            if "DEFERRAL" in explanation:
+                # Highlight the deferral penalty — this is the key differentiator
+                print(f"  {'':>6}** DEFERRAL PENALTY: team knows about this but has not fixed it **")
+
+    # Show re-ranking insight
+    if len(scored_findings) >= 2:
+        top = scored_findings[0]
+        top_risk = top.get("risk_score", {})
+        if top.get("severity", "").upper() != "CRITICAL" and top_risk.get("composite_score", 0) > 70:
+            print(f"\n  [Risk Scorer] KEY INSIGHT: {top.get('cwe_id', '?')} was {top.get('severity', '?')} by code severity")
+            print(f"  [Risk Scorer] but scored {top_risk.get('composite_score', 0)}/100 composite because of:")
+            if top_risk.get("deferral_penalty", 0) > 0:
+                print(f"    - Deferral penalty (+{top_risk['deferral_penalty']}): team acknowledged but deferred the fix")
+            if top_risk.get("historical_frequency", 0) > 0:
+                print(f"    - Historical pattern (+{min(top_risk['historical_frequency']*2, 20)}): {top.get('cwe_id', '?')} seen {top_risk['historical_frequency']} times before")
+            if top_risk.get("architectural_multiplier", 1.0) > 1.0:
+                print(f"    - Architecture (x{top_risk['architectural_multiplier']}): file is in a high-criticality module")
+            print(f"  [Risk Scorer] No code-only scanner can compute this composite score.")
+
     print()
 
     # ===========================
