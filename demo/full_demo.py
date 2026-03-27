@@ -386,8 +386,8 @@ async def demo():
     sarif = generate_sarif(findings, cross_source_correlations, {
         "scan_id": scan_id,
         "repository": f"{owner}/{repo}",
-        "start_time": datetime.utcnow().isoformat() + "Z",
-        "end_time": datetime.utcnow().isoformat() + "Z",
+        "start_time": datetime.now(tz=__import__('datetime').timezone.utc).isoformat(),
+        "end_time": datetime.now(tz=__import__('datetime').timezone.utc).isoformat(),
     })
     save_sarif(sarif, f"deepsentinel-{scan_id}.sarif.json")
     print(f"  [SARIF] GitHub Security compatible report generated")
