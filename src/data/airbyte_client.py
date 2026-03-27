@@ -31,6 +31,13 @@ class PRData:
 
 
 @dataclass
+class GitHubIssueContext:
+    """Security-relevant GitHub issues and PR review comments."""
+    issues: list = field(default_factory=list)
+    pr_comments: list = field(default_factory=list)
+
+
+@dataclass
 class SlackContext:
     messages: list = field(default_factory=list)
     channels_searched: list = field(default_factory=list)
