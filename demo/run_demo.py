@@ -140,7 +140,8 @@ async def demo():
 
     # Step 5: Store in Ghost
     print("[5/6] STORE — Persisting results in Ghost Postgres...")
-    scan_id = "demo-scan-001"
+    import uuid
+    scan_id = f"demo-{uuid.uuid4().hex[:8]}"
     await db.start_scan(scan_id, owner, repo, pr_number)
     for f in findings:
         f["scan_id"] = scan_id
