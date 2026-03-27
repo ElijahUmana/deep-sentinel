@@ -22,15 +22,17 @@
 [Aerospike] Connection failed ((-10, 'Failed to connect', 'src/main/aerospike/as_cluster.c', 416, False)), using in-memory fallback
 [Aerospike] Data model: namespace=test
 [Aerospike] Sets: patterns | scan_cache (TTL 1h) | cves (TTL 24h) | sessions (TTL 2h)
-[Aerospike] Loaded 10 vulnerability patterns into set 'patterns' (0.0ms)
+[Aerospike] Batch-loaded 10 vulnerability patterns into set 'patterns' (0.0ms)
+[Aerospike]   Batch write: 10 records in 7us (1us/record)
 [Aerospike]   Key format: (test, patterns, <pattern_id>)
-[Aerospike]   Bins: pattern_id, regex, cwe_id, severity, description, language
+[Aerospike]   Bins: pattern_id, regex, cwe_id, severity, description, language, hit_count
+[Aerospike]   Secondary indexes: severity (4 groups), cwe_id (10 groups)
 [Ghost] Connected to database
 [Ghost] Schema initialized
 
 [Auth0 Device Flow] Initiating device authorization...
-  Verification URL: https://dev-cv0k6l2rcy152z4j.us.auth0.com/activate?user_code=WHFG-QGPV
-  User Code: WHFG-QGPV
+  Verification URL: https://dev-cv0k6l2rcy152z4j.us.auth0.com/activate?user_code=BLNF-HHLG
+  User Code: BLNF-HHLG
   (In production, user authenticates here; demo continues with client credentials)
   Device flow result: demonstrated
 
@@ -41,10 +43,19 @@
   SCANNING: ElijahUmana/demo-vulnerable-app
 ======================================================================
 
-  Scan ID: scan-c6a25838
+  Scan ID: scan-37ddc601
   Mode: Full repository scan + PR #1 analysis
 
+  [Auth0 FGA] Checking access levels for ElijahUmana/demo-vulnerable-app:
+
 [Auth0 FGA] Authorization check (permissive): user:auth0|device-OYcJpfbV can_view repo_findings:ElijahUmana/demo-vulnerable-app -> ALLOWED
+  [Auth0 FGA] READ access: ALLOWED (view findings is permissive for authenticated agents)
+[Auth0 FGA] Authorization check (strict): user:auth0|device-OYcJpfbV create_ticket repo_findings:ElijahUmana/demo-vulnerable-app -> DENIED (write requires explicit grant)
+  [Auth0 FGA] WRITE access: DENIED (create_ticket requires explicit grant)
+  [Auth0 FGA] --> Agent will escalate to CIBA approval before creating tickets
+
+  [Auth0 FGA] This is the FGA value: read access is open, write access is gated.
+  [Auth0 FGA] The agent can SCAN freely but cannot MODIFY without authorization.
 
 [1/7] GATHER — Pulling multi-source data via Airbyte agent connectors...
   [Airbyte/GitHub] PR #1: Add payment processing endpoint
@@ -84,20 +95,20 @@
     [MEDIUM] [slack_file_mention] Files in this PR discussed in a security context
     [MEDIUM] [known_issue_unresolved] Known issue discussed but unresolved (keywords: need to)
     [MEDIUM] [crypto_upgrade_needed] Cryptographic weakness discussed (keywords: md5, upgrade, bcrypt)
-    [MEDIUM] [slack_pr_discussion] PR topic discussed in Slack (matched: payment, endpoint)
-    [MEDIUM] [slack_pr_discussion] PR topic discussed in Slack (matched: export, endpoint)
-    [MEDIUM] [slack_pr_discussion] PR topic discussed in Slack (matched: payment, processing)
-    [MEDIUM] [slack_pr_discussion] PR topic discussed in Slack (matched: payment, endpoint)
-    [MEDIUM] [slack_pr_discussion] PR topic discussed in Slack (matched: payment, endpoint)
+    [MEDIUM] [slack_pr_discussion] PR topic discussed in Slack (matched: endpoint, payment)
+    [MEDIUM] [slack_pr_discussion] PR topic discussed in Slack (matched: endpoint, export)
+    [MEDIUM] [slack_pr_discussion] PR topic discussed in Slack (matched: processing, payment)
+    [MEDIUM] [slack_pr_discussion] PR topic discussed in Slack (matched: endpoint, payment)
+    [MEDIUM] [slack_pr_discussion] PR topic discussed in Slack (matched: endpoint, payment)
     [LOW] [known_issue_unresolved] Known issue discussed but unresolved (keywords: hardcoded)
     [LOW] [known_issue_unresolved] Known issue discussed but unresolved (keywords: need to)
     [LOW] [crypto_upgrade_needed] Cryptographic weakness discussed (keywords: upgrade)
-  [TrueFoundry] openai-main/gpt-4o-mini | 1445 tok | $0.0005 | 10018ms | llm_correlation
+  [TrueFoundry] openai-main/gpt-4o-mini | 1455 tok | $0.0005 | 10201ms | llm_correlation
   [Correlation Engine] Strategy 3 (LLM discovery): 4 correlations
-    [LLM] The decision to ship without input validation directly impacts the new
-    [LLM] The accumulation of technical debt related to hardcoded credentials an
-    [LLM] The lack of rate limiting in the authentication module and non-complia
-    [LLM] The team's awareness of systemic credential management failures contra
+    [LLM] The decision to ship without input validation directly impacts the sec
+    [LLM] The accumulation of technical debt, including hardcoded credentials an
+    [LLM] The lack of rate limiting and use of deprecated hashing algorithms in 
+    [LLM] The team's awareness of compliance issues and exploitable vulnerabilit
 
   [Correlation Engine] TOTAL: 34 cross-source links
     HIGH confidence: 18 | MEDIUM: 9 | LOW: 7
@@ -113,596 +124,9 @@
 [2/7] UNDERSTAND — Analyzing codebase architecture via Macroscope...
 [Macroscope] Query submitted, workflow: workspace/github_use...
 [Macroscope] Poll timed out after 15.0s (workflow may still be running)
-  [Macroscope] Surface analysis: Macroscope query submitted (check dashboard for results)
+  [Macroscope] Surface query triggered: Macroscope query submitted (check dashboard for results)
 [Macroscope] Query submitted, workflow: workspace/github_use...
-[Macroscope] Poll timed out after 10.0s (workflow may still be running)
+[Macroscope] Poll timed out after 5.0s (workflow may still be running)
   app.py: module=unknown, criticality=medium (heuristic)
 [Macroscope] Query submitted, workflow: workspace/github_use...
-[Macroscope] Poll timed out after 10.0s (workflow may still be running)
-  src/auth/login.py: module=authentication, criticality=high (heuristic)
-[Macroscope] Query submitted, workflow: workspace/github_use...
-[Macroscope] Poll timed out after 10.0s (workflow may still be running)
-  src/api/users.py: module=api-layer, criticality=high (heuristic)
-[Macroscope] Query submitted, workflow: workspace/github_use...
-[Macroscope] Poll timed out after 10.0s (workflow may still be running)
-  payment.py: module=payments, criticality=high (heuristic)
-[Macroscope] Query submitted, workflow: workspace/github_use...
-[Macroscope] Poll timed out after 12.0s (workflow may still be running)
-
-[3/7] CACHE — Aerospike real-time cache + pattern matching...
-  [Aerospike Data Model] Mode: In-memory fallback (same data model)
-  [Aerospike Data Model] Namespace: test
-  [Aerospike Data Model] Sets:
-    'patterns'   -> 10 records | Bins: pattern_id, regex, cwe_id, severity, description
-    'scan_cache' -> 0 records | Bins: results, cached_at, hit_count | TTL: 1h
-    'sessions'   -> 0 records | Bins: session_id, state, updated_at | TTL: 2h
-    'cves'       -> 0 records | Bins: cve_id, severity, description, affected, cvss_score | TTL: 24h
-
-  10 CWE vulnerability patterns loaded from set 'patterns'
-  Severity filter: 2 CRITICAL, 5 HIGH patterns
-  (Uses secondary index on 'severity' bin for server-side filtering)
-  Batch CVE lookup: 3/3 found in single operation
-  (Aerospike batch_get: 1 network round trip instead of 3 sequential gets)
-  Session state cached in set 'sessions': {"status": "scanning", "files": 4, "repo": "ElijahUmana/demo-vulnerable-app"}
-  Scan dedup key cached in set 'scan_cache' (TTL: 300s)
-  TTL expiration demo: record found=True, after TTL expired=False -> correctly expired: True
-  Performance: 13 puts (avg 1us), 7 gets (avg 8us), 6 hits, 1 misses
-
-[4/7] ANALYZE — Security analysis via TrueFoundry AI Gateway...
-  Routing LLM calls through gateway.truefoundry.ai
-  Model: openai-main/gpt-4o-mini (fast scan) + deep verification
-  All calls instrumented by Overmind OverClaw for optimization
-[Analyzer] Step 1 — Aerospike pattern scan: 19 findings in 4.7ms
-  [TrueFoundry] openai-main/gpt-4o-mini | 2127 tok | $0.0008 | 26854ms | llm_scan
-[Analyzer] LLM scan of app.py: 10 findings
-  [TrueFoundry] openai-main/gpt-4o-mini | 925 tok | $0.0003 | 6299ms | llm_scan
-[Analyzer] LLM scan of src/auth/login.py: 3 findings
-  [TrueFoundry] openai-main/gpt-4o-mini | 955 tok | $0.0004 | 8834ms | llm_scan
-[Analyzer] LLM scan of src/api/users.py: 4 findings
-  [TrueFoundry] openai-main/gpt-4o-mini | 1150 tok | $0.0004 | 8687ms | llm_scan
-[Analyzer] LLM scan of payment.py: 5 findings
-[Analyzer] Step 2 — TrueFoundry LLM scan: +22 findings in 50674ms
-
-[Analyzer] === ANALYSIS METRICS ===
-  Step 1 (Aerospike patterns): 19 findings in 4.7ms
-  Step 2 (TrueFoundry LLM):    +22 findings in 50674ms
-  Step 3 (Deep verification):   0ms
-  Total: 41 unique findings in 50679ms
-  Cross-source enriched: 34 correlations
-  VALUE ADD: Code-only scan found 19. With LLM + cross-source: 41 (+116%)
-
-  Total findings: 41
-    CRITICAL: 5
-    HIGH: 26
-    MEDIUM: 10
-
-[5/7] STORE — Ghost database: schema, persist, query history, fork...
-  [Ghost] Database ID: uipdk8byh3
-  [Ghost] Agent introspecting its own schema...
-
-  [Ghost Schema] LLM-optimized database structure (0 tables):
-    DATABASE: deepsentinel (uipdk8byh3)
-    TABLE: audit_log
-    id             SERIAL PRIMARY KEY
-    timestamp      TIMESTAMP WITH TIME ZONE DEFAULT now()
-    action         TEXT NOT NULL
-    actor          TEXT NOT NULL DEFAULT 'agent'::text
-    resource_type  TEXT
-    resource_id    TEXT
-    details        TEXT
-    INDEX idx_audit_action (action)
-    TABLE: correlations
-    id                SERIAL PRIMARY KEY
-    scan_id           TEXT
-    correlation_type  TEXT NOT NULL
-    github_ref        TEXT
-    slack_ref         TEXT
-    description       TEXT NOT NULL
-    risk_score        DOUBLE PRECISION
-    created_at        TIMESTAMP WITH TIME ZONE DEFAULT now()
-    INDEX idx_correlations_scan (scan_id)
-    TABLE: scans
-    id              TEXT PRIMARY KEY
-    repo_owner      TEXT NOT NULL
-    repo_name       TEXT NOT NULL
-    pr_number       INTEGER
-    trigger_type    TEXT NOT NULL DEFAULT 'manual'::text
-    started_at      TIMESTAMP WITH TIME ZONE DEFAULT now()
-    completed_at    TIMESTAMP WITH TIME ZONE
-    findings_count  INTEGER DEFAULT 0
-    critical_count  INTEGER DEFAULT 0
-    high_count      INTEGER DEFAULT 0
-    status          TEXT DEFAULT 'running'::text
-    INDEX idx_scans_repo (repo_owner, repo_name)
-    TABLE: vulnerabilities
-    id                  SERIAL PRIMARY KEY
-    scan_id             TEXT NOT NULL
-    pr_number           INTEGER
-    repo_owner          TEXT NOT NULL
-    repo_name           TEXT NOT NULL
-    file_path           TEXT NOT NULL
-    line_number         INTEGER
-    severity            TEXT NOT NULL
-    cwe_id              TEXT
-    title               TEXT NOT NULL
-    description         TEXT
-    fix_suggestion      TEXT
-    slack_context       TEXT
-    macroscope_context  TEXT
-    status              TEXT DEFAULT 'open'::text
-    created_at          TIMESTAMP WITH TIME ZONE DEFAULT now()
-    INDEX idx_vuln_repo (repo_owner, repo_name)
-    INDEX idx_vuln_scan (scan_id)
-    INDEX idx_vuln_severity (severity)
-    VIEW: pg_buffercache
-    bufferid          INTEGER
-    relfilenode       OID
-    reltablespace     OID
-    reldatabase       OID
-    relforknumber     SMALLINT
-    relblocknumber    BIGINT
-    isdirty           BOOLEAN
-    usagecount        SMALLINT
-    pinning_backends  INTEGER
-    VIEW: pg_buffercache_numa
-    bufferid     INTEGER
-    os_page_num  BIGINT
-    numa_node    INTEGER
-
-  [Ghost] Agent reads schema to understand available data -- no hardcoded SQL.
-  [Ghost] This is Ghost's key differentiator: schema IS the agent's context.
-
-  [Ghost] 41 findings stored in 'vulnerabilities' table
-  [Ghost] 34 correlations stored in 'correlations' table
-
-  [Ghost] Analyzing vulnerability trends across historical scans...
-  [Ghost Trends] Recurring vulnerabilities (appear in multiple scans):
-    CWE-209: seen in 27 scans, 37 total, severities: ['HIGH', 'MEDIUM']
-    CWE-22: seen in 27 scans, 93 total, severities: ['HIGH', 'MEDIUM']
-    CWE-78: seen in 27 scans, 47 total, severities: ['CRITICAL', 'HIGH']
-    CWE-798: seen in 27 scans, 113 total, severities: ['CRITICAL', 'HIGH', 'LOW', 'MEDIUM']
-    CWE-89: seen in 27 scans, 47 total, severities: ['CRITICAL', 'HIGH']
-  [Ghost Trends] Scan-over-scan severity trend:
-    2026-03-27: 41 findings (5C, 26H)
-    2026-03-27: 41 findings (5C, 25H)
-    2026-03-27: 7 findings (1C, 5H)
-    2026-03-27: 7 findings (1C, 5H)
-    2026-03-27: 7 findings (1C, 5H)
-  [Ghost Trends] Fix rate: 0.0% (528 total, 528 open)
-
-  [Ghost SQL] Raw trend query via CLI:
-  [Ghost] Running: ghost sql uipdk8byh3 "SELECT cwe_id, severity, COUNT(*)..."
-    cwe_id  │ severity │ occurrences │ first_seen │ last_seen  
-    ─────────┼──────────┼─────────────┼────────────┼────────────
-     CWE-22  │ HIGH     │ 70          │ 2026-03-27 │ 2026-03-27 
-     CWE-798 │ CRITICAL │ 67          │ 2026-03-27 │ 2026-03-27 
-     CWE-327 │ MEDIUM   │ 50          │ 2026-03-27 │ 2026-03-27 
-     CWE-78  │ HIGH     │ 46          │ 2026-03-27 │ 2026-03-27 
-     CWE-89  │ HIGH     │ 46          │ 2026-03-27 │ 2026-03-27 
-     CWE-327 │ HIGH     │ 40          │ 2026-03-27 │ 2026-03-27 
-     CWE-502 │ HIGH     │ 40          │ 2026-03-27 │ 2026-03-27 
-     CWE-798 │ HIGH     │ 38          │ 2026-03-27 │ 2026-03-27 
-    (8 rows)
-
-  [Ghost Risk Score] Composite: 100 (CRITICAL)
-    Base score: 2585 | Recurrence multiplier: 2.5x | Cross-source multiplier: 4.4x
-    Repeated CWEs: 10 | Cross-source correlations: 34
-
-  [Ghost Fork] Creating ephemeral fork for safe experiment...
-  [Ghost] Running: ghost fork uipdk8byh3 --name experiment-scan-c
-    Forked 'deepsentinel' → 'experiment-scan-c'
-    ID: vl3hf83cw8
-    Connection: postgresql://tsdbadmin:wdiwrbgsr77s0ki3@vl3hf83cw8.doam8z7uyx.tsdb.cloud.timescale.com:32511/tsdb
-
-  [Ghost Fork] Running experimental query in fork (safe -- main DB untouched)...
-[Ghost Fork] Running experiment in forked DB experiment-scan-c...
-[Ghost Fork] Experiment failed: Error: no entries with that projectID:serviceID combination could be found
-
-  [Ghost] Running: ghost list
-    ID          NAME                     STATUS   SIZE    
-    uipdk8byh3  deepsentinel             running  236MiB  
-    hmg52si43p  deepsentinel-experiment  running  252MiB  
-    w4q5ujhz5f  experiment-scan-0        running  252MiB  
-    tww7mkcste  experiment-scan-0        running  253MiB  
-    jjeyx7obgr  experiment-scan-2        running  252MiB  
-    f3acudeten  experiment-scan-2        running  253MiB  
-    apit0s2470  experiment-scan-3        running  268MiB  
-
-  [Ghost] Value: Agent introspects schema, maintains history across scans,
-  [Ghost]        computes trend-aware risk scores, and forks before experiments.
-
-[6/7] AUTHORIZE — Auth0 CIBA for 5 CRITICAL findings...
-  Requesting human approval via Auth0 push notification
-  Action: Create security tickets + alert team
-  Resource: ElijahUmana/demo-vulnerable-app
-[Auth0 CIBA] Failed to initiate: {'error': 'invalid_request', 'error_description': 'binding_message should not exceed 64 characters'}
-
-[7/7] REPORT — Generating cross-source security report...
-  [TrueFoundry] openai-main/gpt-4o | 16903 tok | $0.0642 | 31611ms | report_generation
-[SARIF] Report saved to deepsentinel-scan-c6a25838.sarif.json
-  [SARIF] GitHub Security compatible report generated
-
-======================================================================
-  SCAN COMPLETE — 186.4s total
-======================================================================
-
-  Step timing breakdown:
-    Step 1 GATHER (Airbyte)........................ 13.40s
-    Step 2 UNDERSTAND (Macroscope)................. 72.12s
-    Step 3 CACHE (Aerospike)....................... 0.00s
-    Step 4 ANALYZE (TrueFoundry+Overmind).......... 50.68s
-    Step 5 STORE (Ghost)........................... 18.23s
-    Step 6 AUTHORIZE (Auth0 CIBA).................. 0.36s
-    Step 7 REPORT (Generation)..................... 31.62s
-
-
-======================================================================
-  VALUE-ADD METRIC
-======================================================================
-
-  Code-only scan (regex patterns):    19 findings
-  With cross-source LLM context:    + 22 findings
-  Total findings:                     41 findings (+116%)
-  Cross-source correlations:          34 (Issues + PR comments <-> code)
-
-  Code-only tools (Snyk, CodeQL) would find ~19 issues.
-  DeepSentinel found 41 issues (+116%) by correlating GitHub Issues,
-  PR review comments, architecture analysis, and historical patterns.
-
-  Files scanned: 4
-  Findings: 41 (5 critical, 26 high)
-  Data persisted: Ghost Postgres (uipdk8byh3)
-  Cache: Aerospike (10 patterns, 13 writes, avg 1us per op)
-  LLM routing: TrueFoundry AI Gateway
-  LLM calls: 6 | Total cost: $0.0666
-  Ghost DB: uipdk8byh3 (schema queried + history queried + fork created)
-  Auth: Auth0 — Device Flow + Token Vault + CIBA + FGA (4 pillars)
-  Auth0 CIBA: approval requested
-
-# DeepSentinel Security Report
-**Findings: 30 total (5 critical, 13 high)**
-
-## CRITICAL Hardcoded credentials in source code
-**CWE:** CWE-798 | **File:** app.py:18
-**Risk:** An attacker could gain unauthorized access to the database or external services using the hardcoded credentials.
-**Fix:** Move sensitive credentials to a secure secrets manager or environment variables.
-**Cross-source context:** Known vulnerability acknowledged but NOT yet fixed in src/auth/login.py, payment.py -- risk is accumulating. [Slack Reference](#security-review - 1774649264.027789)
-
-## CRITICAL Hardcoded credentials in source code
-**CWE:** CWE-798 | **File:** app.py:19
-**Risk:** An attacker could gain unauthorized access to the database or external services using the hardcoded credentials.
-**Fix:** Move sensitive credentials to a secure secrets manager or environment variables.
-**Cross-source context:** Known vulnerability acknowledged but NOT yet fixed in src/auth/login.py, payment.py -- risk is accumulating. [Slack Reference](#security-review - 1774649264.027789)
-
-## CRITICAL Hardcoded credentials in source code
-**CWE:** CWE-798 | **File:** app.py:20
-**Risk:** An attacker could gain unauthorized access to the database or external services using the hardcoded credentials.
-**Fix:** Move sensitive credentials to a secure secrets manager or environment variables.
-**Cross-source context:** Known vulnerability acknowledged but NOT yet fixed in src/auth/login.py, payment.py -- risk is accumulating. [Slack Reference](#security-review - 1774649264.027789)
-
-## CRITICAL Hardcoded credentials in source code
-**CWE:** CWE-798 | **File:** src/auth/login.py:11
-**Risk:** An attacker could gain unauthorized access to the database or external services using the hardcoded credentials.
-**Fix:** Move sensitive credentials to a secure secrets manager or environment variables.
-**Cross-source context:** Known vulnerability acknowledged but NOT yet fixed in src/auth/login.py, payment.py -- risk is accumulating. [Slack Reference](#security-review - 1774649264.027789)
-
-## CRITICAL Hardcoded credentials in source code
-**CWE:** CWE-798 | **File:** payment.py:10
-**Risk:** An attacker could gain unauthorized access to the database or external services using the hardcoded credentials.
-**Fix:** Move sensitive credentials to a secure secrets manager or environment variables.
-**Cross-source context:** Known vulnerability acknowledged but NOT yet fixed in src/auth/login.py, payment.py -- risk is accumulating. [Slack Reference](#security-review - 1774649264.027789)
-
-## HIGH Path traversal via unvalidated file paths
-**CWE:** CWE-22 | **File:** app.py:58
-**Risk:** An attacker could read sensitive files on the server by manipulating the 'name' parameter.
-**Fix:** Implement strict validation of file paths and restrict access to allowed directories.
-**Cross-source context:** Security work explicitly deferred (keywords: defer) [Slack Reference](#engineering - 1774649254.982899)
-
-## HIGH Insecure deserialization of untrusted data
-**CWE:** CWE-502 | **File:** app.py:76
-**Risk:** An attacker could send malicious pickle data that executes arbitrary code upon deserialization.
-**Fix:** Avoid using pickle for deserialization of untrusted data; consider safer alternatives.
-**Cross-source context:** Security concern raised by team (keywords: exploitable) [Slack Reference](#security-review - 1774649262.868019)
-
-## HIGH Server-side request forgery via user-controlled URL
-**CWE:** CWE-918 | **File:** app.py:85
-**Risk:** An attacker could send a request to internal services or external malicious sites.
-**Fix:** Validate and sanitize URLs before making requests to prevent SSRF.
-**Cross-source context:** Security concern raised by team (keywords: review) [Slack Reference](#security-review - 1774649262.300989)
-
-## HIGH Path traversal via unvalidated file paths
-**CWE:** CWE-22 | **File:** src/api/users.py:31
-**Risk:** An attacker could read sensitive files on the server by manipulating the 'name' parameter.
-**Fix:** Implement strict validation of file paths and restrict access to allowed directories.
-**Cross-source context:** Security work explicitly deferred (keywords: defer) [Slack Reference](#engineering - 1774649254.982899)
-
-## HIGH Insecure deserialization of untrusted data
-**CWE:** CWE-502 | **File:** src/api/users.py:20
-**Risk:** An attacker could send malicious YAML data that executes arbitrary code during deserialization.
-**Fix:** Use 'yaml.safe_load' instead of 'yaml.load' to prevent arbitrary code execution.
-**Cross-source context:** Security concern raised by team (keywords: review) [Slack Reference](#security-review - 1774649262.300989)
-
-## HIGH Server-side request forgery via user-controlled URL
-**CWE:** CWE-918 | **File:** src/api/users.py:28
-**Risk:** An attacker could send a request to internal services or external malicious sites.
-**Fix:** Implement strict validation of the 'avatar_url' to allow only trusted domains.
-**Cross-source context:** Security concern raised by team (keywords: review) [Slack Reference](#security-review - 1774649262.300989)
-
-## HIGH Path traversal via unvalidated file paths
-**CWE:** CWE-22 | **File:** payment.py:40
-**Risk:** An attacker could read sensitive files on the server by manipulating the 'name' parameter.
-**Fix:** Implement strict validation of file paths and restrict access to allowed directories.
-**Cross-source context:** Security work explicitly deferred (keywords: defer) [Slack Reference](#engineering - 1774649254.982899)
-
-## HIGH SQL Injection
-**CWE:** CWE-89 | **File:** app.py:19
-**Risk:** An attacker could manipulate the 'id' parameter to execute arbitrary SQL commands.
-**Fix:** Use parameterized queries or prepared statements to safely handle user input.
-**Cross-source context:** Known issue discussed but unresolved (keywords: needs to be) [Slack Reference](#engineering - 1774649261.597009)
-
-## HIGH Command Injection
-**CWE:** CWE-78 | **File:** app.py:27
-**Risk:** An attacker could send a malicious hostname to execute arbitrary commands on the server.
-**Fix:** Validate and sanitize user input before using it in shell commands.
-**Cross-source context:** Security concern raised by team (keywords: exploitable) [Slack Reference](#security-review - 1774649262.868019)
-
-## HIGH SQL Injection
-**CWE:** CWE-89 | **File:** src/auth/login.py:12
-**Risk:** An attacker could manipulate the 'username' or 'password' fields in the request to execute arbitrary SQL commands.
-**Fix:** Use parameterized queries to prevent SQL injection.
-**Cross-source context:** Known issue discussed but unresolved (keywords: needs to be) [Slack Reference](#engineering - 1774649261.597009)
-
-## HIGH Command Injection
-**CWE:** CWE-78 | **File:** src/api/users.py:8
-**Risk:** An attacker could manipulate the 'format' parameter to execute arbitrary commands on the server.
-**Fix:** Use a safe method to handle subprocess calls, such as passing arguments as a list and avoiding shell=True.
-**Cross-source context:** Security concern raised by team (keywords: exploitable) [Slack Reference](#security-review - 1774649262.868019)
-
-## HIGH SQL Injection
-**CWE:** CWE-89 | **File:** payment.py:14
-**Risk:** An attacker submits a specially crafted amount or card number that alters the SQL query, potentially allowing them to manipulate the database.
-**Fix:** Use parameterized queries or prepared statements to safely handle user input in SQL queries.
-**Cross-source context:** Known issue discussed but unresolved (keywords: needs to be) [Slack Reference](#engineering - 1774649261.597009)
-
-## HIGH Command Injection
-**CWE:** CWE-78 | **File:** payment.py:25
-**Risk:** An attacker submits a malicious transaction ID that executes arbitrary commands on the server.
-**Fix:** Avoid using os.system with user input. Use safer alternatives or validate and sanitize the input before use.
-**Cross-source context:** Security concern raised by team (keywords: exploitable) [Slack Reference](#security-review - 1774649262.868019)
-
-## MEDIUM Use of weak cryptographic algorithm
-**CWE:** CWE-327 | **File:** app.py:66
-**Risk:** An attacker could easily crack hashed passwords using precomputed hash tables.
-**Fix:** Use a stronger hashing algorithm such as bcrypt or Argon2 for password hashing.
-**Cross-source context:** Cryptographic weakness discussed (keywords: md5) [Slack Reference](#engineering - 1774649259.599829)
-
-## MEDIUM Use of weak cryptographic algorithm
-**CWE:** CWE-327 | **File:** app.py:67
-**Risk:** An attacker could easily crack hashed passwords using precomputed hash tables.
-**Fix:** Use a stronger hashing algorithm such as bcrypt or Argon2 for password hashing.
-**Cross-source context:** Cryptographic weakness discussed (keywords: md5) [Slack Reference](#engineering - 1774649259.599829)
-
-## MEDIUM Use of weak cryptographic algorithm
-**CWE:** CWE-327 | **File:** app.py:71
-**Risk:** An attacker could easily crack hashed passwords using precomputed hash tables.
-**Fix:** Use a stronger hashing algorithm such as bcrypt or Argon2 for password hashing.
-**Cross-source context:** Cryptographic weakness discussed (keywords: md5) [Slack Reference](#engineering - 1774649259.599829)
-
-## MEDIUM Use of weak cryptographic algorithm
-**CWE:** CWE-327 | **File:** app.py:75
-**Risk:** An attacker could easily crack hashed passwords using precomputed hash tables.
-**Fix:** Use a stronger hashing algorithm such as bcrypt or Argon2 for password hashing.
-**Cross-source context:** Cryptographic weakness discussed (keywords: md5) [Slack Reference](#engineering - 1774649259.599829)
-
-## MEDIUM Use of weak cryptographic algorithm
-**CWE:** CWE-327 | **File:** src/auth/login.py:17
-**Risk:** An attacker could easily crack hashed passwords using precomputed hash tables.
-**Fix:** Use a stronger hashing algorithm such as bcrypt or Argon2 for password hashing.
-**Cross-source context:** Cryptographic weakness discussed (keywords: md5) [Slack Reference](#engineering - 1774649259.599829)
-
-## MEDIUM Use of weak cryptographic algorithm
-**CWE:** CWE-327 | **File:** src/auth/login.py:32
-**Risk:** An attacker could easily crack hashed passwords using precomputed hash tables.
-**Fix:** Use a stronger hashing algorithm such as bcrypt or Argon2 for password hashing.
-**Cross-source context:** Cryptographic weakness discussed (keywords: md5) [Slack Reference](#engineering - 1774649259.599829)
-
-## MEDIUM Use of weak cryptographic algorithm
-**CWE:** CWE-327 | **File:** src/api/users.py:19
-**Risk:** An attacker could easily crack hashed passwords using precomputed hash tables.
-**Fix:** Use a stronger hashing algorithm such as bcrypt or Argon2 for password hashing.
-**Cross-source context:** Cryptographic weakness discussed (keywords: md5) [Slack Reference](#engineering - 1774649259.599829)
-
-## MEDIUM Cross-Site Scripting (XSS)
-**CWE:** CWE-79 | **File:** app.py:34
-**Risk:** An attacker could inject malicious scripts that execute in the context of the user's browser.
-**Fix:** Escape user input before including it in HTML responses.
-**Cross-source context:** Security concern raised by team (keywords: review) [Slack Reference](#security-review - 1774649262.300989)
-
-## MEDIUM No Rate Limiting
-**CWE:** CWE-400 | **File:** app.py:74
-**Risk:** An attacker could flood the endpoint with requests to enumerate valid email addresses.
-**Fix:** Implement rate limiting on sensitive endpoints to mitigate abuse.
-**Cross-source context:** Security architecture review: the auth module has no rate limiting on login attempts. [Slack Reference](#engineering - 1774649257.575969)
-
-## MEDIUM Leaking Internal Paths
-**CWE:** CWE-209 | **File:** payment.py:19
-**Risk:** An attacker can use the leaked path to craft further attacks against the server or its filesystem.
-**Fix:** Avoid exposing internal paths in API responses. Only return necessary information to the client.
-**Cross-source context:** Known issue discussed but unresolved (keywords: hardcoded) [Slack Reference](#engineering - 1774649259.599829)
-
-## MEDIUM Path Traversal
-**CWE:** CWE-22 | **File:** src/api/users.py:23
-**Risk:** An attacker could manipulate the 'avatar_url' to include path traversal sequences, writing files outside the intended directory.
-**Fix:** Sanitize the filename and restrict it to a safe format, ensuring it does not contain path traversal characters.
-**Cross-source context:** Files in this PR discussed in a security context [Slack Reference](#engineering - 1774649260.246149)
-
-## MEDIUM Hardcoded Secret Key
-**CWE:** CWE-798 | **File:** src/auth/login.py:4
-**Risk:** An attacker with access to the source code could easily find the secret key and hijack user sessions.
-**Fix:** Store the secret key in an environment variable or a secure secrets manager instead of hardcoding it.
-**Cross-source context:** Known issue discussed but unresolved (keywords: hardcoded) [Slack Reference](#engineering - 1774649259.599829)
-
-Recommendation: **BLOCK** due to unresolved critical vulnerabilities and high-risk issues. Immediate remediation is required before proceeding with deployment.
-
-======================================================================
-  WHAT EXISTING TOOLS MISS
-======================================================================
-
-  Snyk, CodeQL, and GitHub Advanced Security scan CODE.
-  DeepSentinel scans CONTEXT -- correlating GitHub Issues, Slack, PR reviews,
-  and architecture to find risks that live BETWEEN tools.
-
-  [HIGH] Known vulnerability acknowledged but NOT yet fixed in src/auth/login.py, payment.py -- risk is accumulating
-    Issue #3: Security: Hardcoded credentials need to be moved to secrets manager <-> PR #1 + Issue #3: src/auth/login.py, payment.py
-    WHY SCANNERS MISS THIS: The code looks the same whether or not the team knows about the issue -- scanners cannot detect acknowledged-but-unresolved risk
-
-  [HIGH] Security work EXPLICITLY DEFERRED per team decision in src/api/users.py, payment.py -- Snyk/CodeQL cannot detect deferred remediation
-    Issue #2: Security: Input validation missing on payment endpoints <-> PR #1 + Issue #2: src/api/users.py, payment.py
-    WHY SCANNERS MISS THIS: Code scanners see the vulnerability but not the team decision to defer fixing it -- the risk context is invisible
-
-  [HIGH] Security concern raised in PR review by ElijahUmana: I reviewed the payment processing code and there are security concerns that should be addressed befo
-    PR #1 comment by ElijahUmana <-> PR #1: payment.py
-    WHY SCANNERS MISS THIS: Code scanners analyze syntax, not team review discussions
-
-  [HIGH] Security concern raised in PR review by ElijahUmana: ## 🔴 DeepSentinel Security Review
-
-**4 findings** | 3 critical | 1 high | Recommendation: **BLOCK**
-
-    PR #1 comment by ElijahUmana <-> PR #1: general
-    WHY SCANNERS MISS THIS: Code scanners analyze syntax, not team review discussions
-
-  [HIGH] Security work explicitly deferred (keywords: defer)
-    #security-review - 1774649265.884809 <-> payment.py
-    WHY SCANNERS MISS THIS: Team explicitly deferred security work on files in this PR. Code-only scanners see the vulnerability but not the decision to leave it.
-
-  [HIGH] Security concern raised by team (keywords: review)
-    #security-review - 1774649265.317689 <-> src/auth/login.py
-    WHY SCANNERS MISS THIS: Team member raised security concern about files in this PR. Direct human expert judgment no automated scanner can replicate.
-
-  [HIGH] Known issue discussed but unresolved (keywords: hardcoded)
-    #security-review - 1774649264.027789 <-> payment.py
-    WHY SCANNERS MISS THIS: Known issue discussed but unresolved in files being changed. Team aware of the risk but it persists in the codebase.
-
-  [HIGH] Security concern raised by team (keywords: exploitable)
-    #security-review - 1774649262.868019 <-> payment.py
-    WHY SCANNERS MISS THIS: Team member raised security concern about files in this PR. Direct human expert judgment no automated scanner can replicate.
-
-  [HIGH] Known issue discussed but unresolved (keywords: hardcoded)
-    #security-review - 1774649262.300989 <-> payment.py
-    WHY SCANNERS MISS THIS: Known issue discussed but unresolved in files being changed. Team aware of the risk but it persists in the codebase.
-
-  [HIGH] Security concern raised by team (keywords: review)
-    #security-review - 1774649262.300989 <-> payment.py
-    WHY SCANNERS MISS THIS: Team member raised security concern about files in this PR. Direct human expert judgment no automated scanner can replicate.
-
-  [HIGH] Known issue discussed but unresolved (keywords: needs to be)
-    #security-review - 1774649261.597009 <-> src/api/users.py, payment.py
-    WHY SCANNERS MISS THIS: Known issue discussed but unresolved in files being changed. Team aware of the risk but it persists in the codebase.
-
-  [HIGH] Security work explicitly deferred (keywords: tech debt)
-    #engineering - 1774649259.599829 <-> payment.py
-    WHY SCANNERS MISS THIS: Team explicitly deferred security work on files in this PR. Code-only scanners see the vulnerability but not the decision to leave it.
-
-  [HIGH] Known issue discussed but unresolved (keywords: hardcoded)
-    #engineering - 1774649259.599829 <-> payment.py
-    WHY SCANNERS MISS THIS: Known issue discussed but unresolved in files being changed. Team aware of the risk but it persists in the codebase.
-
-  [HIGH] Cryptographic weakness discussed (keywords: md5)
-    #engineering - 1774649259.599829 <-> payment.py
-    WHY SCANNERS MISS THIS: Weak cryptography discussed for files in this PR. Team knows the crypto is weak but code still ships with it.
-
-  [HIGH] Cryptographic weakness discussed (keywords: md5, bcrypt, argon)
-    #engineering - 1774649257.575969 <-> src/auth/login.py
-    WHY SCANNERS MISS THIS: Weak cryptography discussed for files in this PR. Team knows the crypto is weak but code still ships with it.
-
-  [HIGH] Known issue discussed but unresolved (keywords: hardcoded, still)
-    #engineering - 1774649256.364199 <-> payment.py
-    WHY SCANNERS MISS THIS: Known issue discussed but unresolved in files being changed. Team aware of the risk but it persists in the codebase.
-
-  [HIGH] Security work explicitly deferred (keywords: defer, q2)
-    #engineering - 1774649254.982899 <-> payment.py
-    WHY SCANNERS MISS THIS: Team explicitly deferred security work on files in this PR. Code-only scanners see the vulnerability but not the decision to leave it.
-
-  [HIGH] Known issue discussed but unresolved (keywords: hardcoded, still, need to)
-    #engineering - 1774648791.579289 <-> payment.py
-    WHY SCANNERS MISS THIS: Known issue discussed but unresolved in files being changed. Team aware of the risk but it persists in the codebase.
-
-  [MEDIUM] Files in this PR discussed in a security context
-    #security-review - 1774648792.321049 <-> payment.py
-    WHY SCANNERS MISS THIS: Team discussed these files in security-related conversation. Human context that pure static analysis cannot provide.
-
-  [MEDIUM] Files in this PR discussed in a security context
-    #engineering - 1774649260.246149 <-> src/api/users.py
-    WHY SCANNERS MISS THIS: Team discussed these files in security-related conversation. Human context that pure static analysis cannot provide.
-
-  [MEDIUM] Known issue discussed but unresolved (keywords: need to)
-    #engineering - 1774648792.074839 <-> PR #1 modules: auth
-    WHY SCANNERS MISS THIS: Team acknowledged an issue in this module that has not been resolved. Turns a code finding from 'possible risk' into 'confirmed known risk'.
-
-  [MEDIUM] Cryptographic weakness discussed (keywords: md5, upgrade, bcrypt)
-    #engineering - 1774648792.074839 <-> PR #1 modules: auth
-    WHY SCANNERS MISS THIS: Cryptographic weakness discussed for this module. Gap between team knowledge and remediation action.
-
-  [MEDIUM] PR topic discussed in Slack (matched: payment, endpoint)
-    #security-review - 1774649265.884809 <-> PR #1 - Add payment processing endpoint
-    WHY SCANNERS MISS THIS: PR subject discussed in team channels. May contain risk context, design tradeoffs, or deferred work the PR itself omits.
-
-  [MEDIUM] PR topic discussed in Slack (matched: export, endpoint)
-    #security-review - 1774649264.667519 <-> PR #1 - Add payment processing endpoint
-    WHY SCANNERS MISS THIS: PR subject discussed in team channels. May contain risk context, design tradeoffs, or deferred work the PR itself omits.
-
-  [MEDIUM] PR topic discussed in Slack (matched: payment, processing)
-    #security-review - 1774649264.027789 <-> PR #1 - Add payment processing endpoint
-    WHY SCANNERS MISS THIS: PR subject discussed in team channels. May contain risk context, design tradeoffs, or deferred work the PR itself omits.
-
-  [MEDIUM] PR topic discussed in Slack (matched: payment, endpoint)
-    #security-review - 1774649262.868019 <-> PR #1 - Add payment processing endpoint
-    WHY SCANNERS MISS THIS: PR subject discussed in team channels. May contain risk context, design tradeoffs, or deferred work the PR itself omits.
-
-  [MEDIUM] PR topic discussed in Slack (matched: payment, endpoint)
-    #engineering - 1774649254.982899 <-> PR #1 - Add payment processing endpoint
-    WHY SCANNERS MISS THIS: PR subject discussed in team channels. May contain risk context, design tradeoffs, or deferred work the PR itself omits.
-
-  [LOW] Known issue discussed but unresolved (keywords: hardcoded)
-    #security-review - 1774649263.468249 <-> PR #1
-    WHY SCANNERS MISS THIS: Team references unresolved issue. General signal of accumulating security debt.
-
-  [LOW] Known issue discussed but unresolved (keywords: need to)
-    #engineering - 1774649260.946199 <-> PR #1
-    WHY SCANNERS MISS THIS: Team references unresolved issue. General signal of accumulating security debt.
-
-  [LOW] Cryptographic weakness discussed (keywords: upgrade)
-    #engineering - 1774649260.946199 <-> PR #1
-    WHY SCANNERS MISS THIS: Weak cryptography mentioned in team discussion. Signals team awareness of crypto issues in the codebase.
-
-  [LOW] The decision to ship without input validation directly impacts the new payment processing endpoint's security.
-    ["Risk register update: adding 'deferred input validation on payment endpoints' as HIGH risk.", 'Security review of PR #1: BLOCK. Three critical findings — command injection, SQL injection, and hardcoded credentials in the payment module.'] <-> ['payment.py']
-    WHY SCANNERS MISS THIS: This connection highlights the team's acceptance of risk regarding input validation, which is not evident from code changes alone.
-
-  [LOW] The accumulation of technical debt related to hardcoded credentials and SQL injection across multiple modules indicates systemic issues.
-    ['Tech debt standup: we have 12 open security items. Top 3: SQL injection in payments, hardcoded creds, and the MD5 hashing in auth.', "Reminder: the hardcoded DB password in payment.py:10 ('admin123') was supposed to be moved to AWS Secrets Manager last sprint."] <-> ['payment.py', 'src/auth/login.py']
-    WHY SCANNERS MISS THIS: This connection reveals a broader context of security neglect that a single code review would not capture.
-
-  [LOW] The lack of rate limiting in the authentication module and non-compliance with PCI DSS in the payment module indicates a design oversight affecting overall security.
-    ['Security architecture review: the auth module has no rate limiting on login attempts.', "Compliance note: our payment processing code doesn't meet PCI DSS requirements."] <-> ['src/auth/login.py', 'payment.py']
-    WHY SCANNERS MISS THIS: This connection emphasizes how architectural decisions impact security across related components, which is not visible through code changes alone.
-
-  [LOW] The team's awareness of systemic credential management failures contrasts with the critical vulnerabilities identified in the payment module.
-    ["Incident response: found that the same hardcoded password 'admin123' appears in 3 files.", 'Penetration test results: the refund endpoint (payment.py:30) is exploitable via command injection.'] <-> ['payment.py']
-    WHY SCANNERS MISS THIS: This connection shows a disconnect between the team's understanding of credential management risks and the immediate security threats present in the code.
-
-
-======================================================================
-  INTEGRATION SUMMARY
-======================================================================
-
-  1. Auth0      — Device Flow + Token Vault + CIBA + FGA (4 agentic pillars)
-  2. Airbyte    — GitHub + Slack agent connectors + entity cache + enrichment metrics
-  3. Macroscope — Architecture-aware severity scoring
-  4. Ghost      — Persistent Postgres: ghost schema (LLM context), ghost sql (history), ghost fork (safe experiments)
-  5. TrueFoundry — AI Gateway multi-model routing + observability
-  6. Aerospike  — Real-time cache: patterns, sessions, scan dedup, TTL expiration
-  7. Overmind   — OverClaw agent optimization (overclaw optimize deepsentinel)
-
-  'Existing tools scan code. We scan context.'
-  DeepSentinel — Cross-Source Security Intelligence
+[Macroscope] Poll timed out after 5.0s (workflow may still be running)
