@@ -1,0 +1,183 @@
+{
+  "agent_description": "DeepSentinel is a security vulnerability scanner that analyzes source code for common security weaknesses. It uses an LLM to identify vulnerabilities across 10 CWE categories including hardcoded credentials, SQL injection, command injection, XSS, and others. The agent returns structured findings with severity levels and provides recommendations for code approval, review, or blocking based on risk assessment.",
+  "agent_path": "/Users/elijahumana/deep-agents-hackathon/src/overclaw_agent.py",
+  "input_schema": {
+    "code": {
+      "type": "string",
+      "description": "The source code to analyze for security vulnerabilities"
+    },
+    "file_path": {
+      "type": "string",
+      "description": "Path or name of the file being analyzed (optional, defaults to 'unknown')"
+    },
+    "context": {
+      "type": "string",
+      "description": "Additional context about the code or analysis requirements (optional)"
+    }
+  },
+  "output_fields": {
+    "findings": {
+      "type": "array",
+      "description": "List of security vulnerabilities found in the code, each with severity, CWE ID, title, line number, description, and fix recommendation",
+      "weight": 16,
+      "importance": "critical"
+    },
+    "risk_level": {
+      "type": "enum",
+      "description": "Overall risk level based on the highest severity finding",
+      "weight": 18,
+      "importance": "critical",
+      "values": [
+        "CRITICAL",
+        "HIGH",
+        "MEDIUM",
+        "LOW",
+        "NONE",
+        "UNKNOWN"
+      ],
+      "partial_credit": true,
+      "partial_score": 4
+    },
+    "recommendation": {
+      "type": "enum",
+      "description": "Action recommendation based on risk level",
+      "weight": 18,
+      "importance": "critical",
+      "values": [
+        "BLOCK",
+        "REVIEW",
+        "APPROVE"
+      ],
+      "partial_credit": true,
+      "partial_score": 4
+    },
+    "findings_count": {
+      "type": "number",
+      "description": "Total number of security findings identified",
+      "weight": 12,
+      "importance": "important",
+      "range": [
+        0,
+        100
+      ],
+      "tolerance_bands": [
+        {
+          "within": 1,
+          "score_pct": 1.0
+        },
+        {
+          "within": 2,
+          "score_pct": 0.8
+        },
+        {
+          "within": 3,
+          "score_pct": 0.5
+        },
+        {
+          "within": 5,
+          "score_pct": 0.25
+        }
+      ]
+    },
+    "raw_analysis": {
+      "type": "text",
+      "description": "Raw LLM response when JSON parsing fails (fallback only)",
+      "weight": 6,
+      "importance": "minor",
+      "eval_mode": "skip"
+    }
+  },
+  "structure_weight": 20,
+  "total_points": 100,
+  "optimizable_elements": [
+    "system prompt instructions",
+    "CWE category definitions",
+    "JSON schema requirements",
+    "model selection",
+    "run function orchestration logic",
+    "response parsing and validation",
+    "consistency enforcement rules"
+  ],
+  "fixed_elements": [
+    "call_llm tool implementation",
+    "overclaw.core.tracer integration",
+    "JSON parsing libraries",
+    "regex extraction patterns"
+  ],
+  "tool_config": {
+    "expected_tools": [
+      "call_llm"
+    ],
+    "dependencies": [],
+    "param_constraints": {
+      "call_llm": {
+        "model": [
+          "claude-sonnet-4-20250514"
+        ]
+      }
+    }
+  },
+  "tool_usage_weight": 10,
+  "consistency_rules": [
+    {
+      "field_a": "risk_level",
+      "field_b": "recommendation",
+      "type": "correlation",
+      "description": "CRITICAL/HIGH risk should map to BLOCK, MEDIUM to REVIEW, LOW/NONE to APPROVE",
+      "penalty": 5.0
+    },
+    {
+      "field_a": "findings_count",
+      "field_b": "risk_level",
+      "type": "correlation",
+      "description": "Zero findings should result in NONE risk level, non-zero findings should not be NONE",
+      "penalty": 3.0
+    }
+  ],
+  "policy": {
+    "purpose": "Analyzes source code for security vulnerabilities across 10 CWE categories and provides risk-based recommendations for code approval workflows.",
+    "domain_rules": [
+      "Must scan for exactly 10 CWE categories: 798, 89, 78, 79, 22, 327, 502, 918, 601, 95",
+      "Hardcoded credentials include passwords, API keys, and secrets in source code (inferred)",
+      "Weak cryptography includes MD5/SHA1 for passwords and weak ciphers (inferred)",
+      "Path traversal requires unsanitized input in file paths (inferred)",
+      "Risk level must match the highest individual finding severity (inferred)"
+    ],
+    "domain_edge_cases": [
+      {
+        "scenario": "No vulnerabilities found",
+        "correct_handling": "Return empty findings array with NONE risk level and APPROVE recommendation (inferred)"
+      },
+      {
+        "scenario": "JSON parsing failure",
+        "correct_handling": "Return UNKNOWN risk level with REVIEW recommendation and include raw analysis (inferred)"
+      }
+    ],
+    "terminology": {
+      "Risk Level": "Overall assessment (CRITICAL/HIGH/MEDIUM/LOW/NONE/UNKNOWN)",
+      "Recommendation": "Action guidance (BLOCK/REVIEW/APPROVE)",
+      "Finding": "Individual vulnerability with severity, CWE ID, description, and fix"
+    },
+    "output_constraints": [
+      "Must return structured JSON with findings array, risk_level, recommendation, and findings_count",
+      "Each finding requires: severity, cwe_id, title, line_number, description, fix",
+      "Findings count must equal length of findings array"
+    ],
+    "tool_requirements": [
+      "Must use claude-sonnet-4-20250514 model exclusively",
+      "System prompt must specify all 10 CWE categories and JSON schema requirements",
+      "Must request pure JSON response without markdown formatting"
+    ],
+    "decision_mapping": [
+      "CRITICAL/HIGH risk \u2192 BLOCK recommendation",
+      "MEDIUM risk \u2192 REVIEW recommendation",
+      "LOW/NONE risk \u2192 APPROVE recommendation",
+      "Zero findings \u2192 NONE risk level"
+    ],
+    "quality_expectations": [
+      "Enforce consistency between risk level and recommendation through post-processing",
+      "Attempt multiple JSON extraction methods before fallback",
+      "Provide actionable fix recommendations for each finding"
+    ]
+  }
+}

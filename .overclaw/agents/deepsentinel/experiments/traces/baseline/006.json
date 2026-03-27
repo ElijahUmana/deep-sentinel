@@ -1,0 +1,51 @@
+{
+  "trace_id": "baseline_006",
+  "input_data": {
+    "code": "import pickle\ndef load_data(data):\n    return pickle.loads(data)",
+    "file_path": "serialization/loader.py",
+    "context": "Data deserialization module"
+  },
+  "output_data": {
+    "findings": [
+      {
+        "severity": "CRITICAL",
+        "cwe_id": "CWE-502",
+        "title": "Insecure deserialization with pickle",
+        "line_number": 3,
+        "description": "Using pickle.loads() on untrusted data allows arbitrary code execution. Pickle can deserialize and execute malicious Python objects, leading to remote code execution.",
+        "fix": "Use safe serialization formats like JSON, or implement input validation and use pickle only with trusted data sources. Consider using safer alternatives like json.loads() or implementing a whitelist of allowed classes."
+      }
+    ],
+    "risk_level": "CRITICAL",
+    "recommendation": "BLOCK",
+    "findings_count": 1
+  },
+  "spans": [
+    {
+      "span_type": "llm_call",
+      "name": "claude-sonnet-4-20250514",
+      "start_time": 1774643557.810463,
+      "end_time": 1774643562.0829408,
+      "latency_ms": 4272.477865219116,
+      "metadata": {
+        "model": "claude-sonnet-4-20250514",
+        "messages_count": 2,
+        "tools_provided": [],
+        "response_content": "{\"findings\": [{\"severity\": \"CRITICAL\", \"cwe_id\": \"CWE-502\", \"title\": \"Insecure deserialization with pickle\", \"line_number\": 3, \"description\": \"Using pickle.loads() on untrusted data allows arbitrary code execution. Pickle can deserialize and execute malicious Python objects, leading to remote code execution.\", \"fix\": \"Use safe serialization formats like JSON, or implement input validation and use pickle only with trusted data sources. Consider using safer alternatives like json.loads() or implementing a whitelist of allowed classes.\"}], \"risk_level\": \"CRITICAL\", \"recommendation\": \"BLOCK\"}",
+        "tool_calls": [],
+        "prompt_tokens": 500,
+        "completion_tokens": 147,
+        "total_tokens": 647,
+        "cost": 0.003705
+      },
+      "error": null
+    }
+  ],
+  "start_time": 1774643557.810442,
+  "end_time": 1774643562.083203,
+  "total_latency_ms": 4272.761106491089,
+  "total_tokens": 647,
+  "total_cost": 0.003705,
+  "score": 0.0,
+  "error": null
+}

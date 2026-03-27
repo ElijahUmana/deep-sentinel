@@ -1,0 +1,51 @@
+{
+  "trace_id": "baseline_002",
+  "input_data": {
+    "code": "import os\ndef run_command(user_input):\n    os.system(f\"ls {user_input}\")\n    return \"Command executed\"",
+    "file_path": "utils/commands.py",
+    "context": "Command execution utility"
+  },
+  "output_data": {
+    "findings": [
+      {
+        "severity": "CRITICAL",
+        "cwe_id": "CWE-78",
+        "title": "OS Command Injection",
+        "line_number": 3,
+        "description": "User input is directly concatenated into a shell command without sanitization, allowing arbitrary command execution",
+        "fix": "Use subprocess with shell=False and validate/sanitize input, or use shlex.quote() to escape shell metacharacters"
+      }
+    ],
+    "risk_level": "CRITICAL",
+    "recommendation": "BLOCK",
+    "findings_count": 1
+  },
+  "spans": [
+    {
+      "span_type": "llm_call",
+      "name": "claude-sonnet-4-20250514",
+      "start_time": 1774643554.681191,
+      "end_time": 1774643557.808089,
+      "latency_ms": 3126.8980503082275,
+      "metadata": {
+        "model": "claude-sonnet-4-20250514",
+        "messages_count": 2,
+        "tools_provided": [],
+        "response_content": "{\"findings\": [{\"severity\": \"CRITICAL\", \"cwe_id\": \"CWE-78\", \"title\": \"OS Command Injection\", \"line_number\": 3, \"description\": \"User input is directly concatenated into a shell command without sanitization, allowing arbitrary command execution\", \"fix\": \"Use subprocess with shell=False and validate/sanitize input, or use shlex.quote() to escape shell metacharacters\"}], \"risk_level\": \"CRITICAL\", \"recommendation\": \"BLOCK\"}",
+        "tool_calls": [],
+        "prompt_tokens": 511,
+        "completion_tokens": 115,
+        "total_tokens": 626,
+        "cost": 0.003258
+      },
+      "error": null
+    }
+  ],
+  "start_time": 1774643554.681184,
+  "end_time": 1774643557.8083808,
+  "total_latency_ms": 3127.196788787842,
+  "total_tokens": 626,
+  "total_cost": 0.003258,
+  "score": 0.0,
+  "error": null
+}

@@ -1,0 +1,362 @@
+[
+  {
+    "input": {
+      "code": "def get_user(user_id):\n    query = f\"SELECT * FROM users WHERE id = {user_id}\"\n    return db.execute(query)",
+      "file_path": "app/models.py",
+      "context": "User authentication module"
+    },
+    "expected_output": {
+      "findings": [
+        {
+          "severity": "HIGH",
+          "cwe_id": "CWE-89",
+          "title": "SQL injection vulnerability",
+          "line_number": 2,
+          "description": "User input is directly interpolated into SQL query without sanitization",
+          "fix": "Use parameterized queries or prepared statements"
+        }
+      ],
+      "risk_level": "HIGH",
+      "recommendation": "BLOCK",
+      "findings_count": 1
+    }
+  },
+  {
+    "input": {
+      "code": "API_KEY = \"sk-1234567890abcdef\"\nSECRET_TOKEN = \"ghp_xxxxxxxxxxxxxxxxxxxx\"\ndb_password = \"admin123\"",
+      "file_path": "config.py",
+      "context": "Application configuration"
+    },
+    "expected_output": {
+      "findings": [
+        {
+          "severity": "CRITICAL",
+          "cwe_id": "CWE-798",
+          "title": "Hardcoded API key",
+          "line_number": 1,
+          "description": "API key is hardcoded in source code",
+          "fix": "Move API key to environment variables or secure configuration"
+        },
+        {
+          "severity": "CRITICAL",
+          "cwe_id": "CWE-798",
+          "title": "Hardcoded secret token",
+          "line_number": 2,
+          "description": "Secret token is hardcoded in source code",
+          "fix": "Move secret to environment variables or secure vault"
+        },
+        {
+          "severity": "CRITICAL",
+          "cwe_id": "CWE-798",
+          "title": "Hardcoded database password",
+          "line_number": 3,
+          "description": "Database password is hardcoded in source code",
+          "fix": "Use environment variables or secure configuration management"
+        }
+      ],
+      "risk_level": "CRITICAL",
+      "recommendation": "BLOCK",
+      "findings_count": 3
+    }
+  },
+  {
+    "input": {
+      "code": "import os\ndef run_command(user_input):\n    os.system(f\"ls {user_input}\")\n    return \"Command executed\"",
+      "file_path": "utils/commands.py",
+      "context": "Command execution utility"
+    },
+    "expected_output": {
+      "findings": [
+        {
+          "severity": "CRITICAL",
+          "cwe_id": "CWE-78",
+          "title": "OS command injection",
+          "line_number": 3,
+          "description": "User input is directly passed to os.system without sanitization",
+          "fix": "Use subprocess with shell=False and validate/sanitize input"
+        }
+      ],
+      "risk_level": "CRITICAL",
+      "recommendation": "BLOCK",
+      "findings_count": 1
+    }
+  },
+  {
+    "input": {
+      "code": "def display_message(message):\n    return f\"<div>{message}</div>\"",
+      "file_path": "templates/helpers.py",
+      "context": "Template helper functions"
+    },
+    "expected_output": {
+      "findings": [
+        {
+          "severity": "MEDIUM",
+          "cwe_id": "CWE-79",
+          "title": "Cross-site scripting vulnerability",
+          "line_number": 2,
+          "description": "User input is rendered in HTML without escaping",
+          "fix": "HTML escape user input or use safe template rendering"
+        }
+      ],
+      "risk_level": "MEDIUM",
+      "recommendation": "REVIEW",
+      "findings_count": 1
+    }
+  },
+  {
+    "input": {
+      "code": "def read_file(filename):\n    with open(f\"./uploads/{filename}\", 'r') as f:\n        return f.read()",
+      "file_path": "handlers/file.py",
+      "context": "File handling operations"
+    },
+    "expected_output": {
+      "findings": [
+        {
+          "severity": "HIGH",
+          "cwe_id": "CWE-22",
+          "title": "Path traversal vulnerability",
+          "line_number": 2,
+          "description": "User-controlled filename allows directory traversal attacks",
+          "fix": "Validate and sanitize filename, use os.path.join with safety checks"
+        }
+      ],
+      "risk_level": "HIGH",
+      "recommendation": "BLOCK",
+      "findings_count": 1
+    }
+  },
+  {
+    "input": {
+      "code": "import hashlib\ndef hash_password(password):\n    return hashlib.md5(password.encode()).hexdigest()",
+      "file_path": "auth/crypto.py",
+      "context": "Password hashing utility"
+    },
+    "expected_output": {
+      "findings": [
+        {
+          "severity": "HIGH",
+          "cwe_id": "CWE-327",
+          "title": "Weak cryptographic hash",
+          "line_number": 3,
+          "description": "MD5 is cryptographically broken and unsuitable for password hashing",
+          "fix": "Use bcrypt, scrypt, or Argon2 for password hashing"
+        }
+      ],
+      "risk_level": "HIGH",
+      "recommendation": "BLOCK",
+      "findings_count": 1
+    }
+  },
+  {
+    "input": {
+      "code": "import pickle\ndef load_data(data):\n    return pickle.loads(data)",
+      "file_path": "serialization/loader.py",
+      "context": "Data deserialization module"
+    },
+    "expected_output": {
+      "findings": [
+        {
+          "severity": "CRITICAL",
+          "cwe_id": "CWE-502",
+          "title": "Insecure deserialization",
+          "line_number": 3,
+          "description": "pickle.loads on untrusted data allows arbitrary code execution",
+          "fix": "Use safe serialization formats like JSON or validate data source"
+        }
+      ],
+      "risk_level": "CRITICAL",
+      "recommendation": "BLOCK",
+      "findings_count": 1
+    }
+  },
+  {
+    "input": {
+      "code": "import requests\ndef fetch_url(url):\n    return requests.get(url).text",
+      "file_path": "api/fetcher.py",
+      "context": "URL fetching service"
+    },
+    "expected_output": {
+      "findings": [
+        {
+          "severity": "HIGH",
+          "cwe_id": "CWE-918",
+          "title": "Server-side request forgery",
+          "line_number": 3,
+          "description": "User-controlled URL in server-side request without validation",
+          "fix": "Validate and whitelist allowed URLs/domains"
+        }
+      ],
+      "risk_level": "HIGH",
+      "recommendation": "BLOCK",
+      "findings_count": 1
+    }
+  },
+  {
+    "input": {
+      "code": "def redirect_user(redirect_url):\n    return redirect(redirect_url)",
+      "file_path": "views/auth.py",
+      "context": "Authentication redirect handler"
+    },
+    "expected_output": {
+      "findings": [
+        {
+          "severity": "MEDIUM",
+          "cwe_id": "CWE-601",
+          "title": "Open redirect vulnerability",
+          "line_number": 2,
+          "description": "User-controlled redirect target without validation",
+          "fix": "Validate redirect URLs against whitelist of allowed domains"
+        }
+      ],
+      "risk_level": "MEDIUM",
+      "recommendation": "REVIEW",
+      "findings_count": 1
+    }
+  },
+  {
+    "input": {
+      "code": "def execute_code(user_code):\n    return eval(user_code)",
+      "file_path": "sandbox/executor.py",
+      "context": "Code execution sandbox"
+    },
+    "expected_output": {
+      "findings": [
+        {
+          "severity": "CRITICAL",
+          "cwe_id": "CWE-95",
+          "title": "Code injection vulnerability",
+          "line_number": 2,
+          "description": "eval() on user input allows arbitrary code execution",
+          "fix": "Use ast.literal_eval for safe evaluation or implement proper sandboxing"
+        }
+      ],
+      "risk_level": "CRITICAL",
+      "recommendation": "BLOCK",
+      "findings_count": 1
+    }
+  },
+  {
+    "input": {
+      "code": "def safe_function():\n    return \"Hello, World!\"",
+      "file_path": "utils/helpers.py",
+      "context": "Utility helper functions"
+    },
+    "expected_output": {
+      "findings": [],
+      "risk_level": "NONE",
+      "recommendation": "APPROVE",
+      "findings_count": 0
+    }
+  },
+  {
+    "input": {
+      "code": "password = \"secret123\"\nquery = f\"SELECT * FROM users WHERE id = {user_id}\"\nos.system(f\"rm {filename}\")\nreturn f\"<p>{message}</p>\"",
+      "file_path": "vulnerable.py",
+      "context": "Multiple vulnerability example"
+    },
+    "expected_output": {
+      "findings": [
+        {
+          "severity": "CRITICAL",
+          "cwe_id": "CWE-798",
+          "title": "Hardcoded password",
+          "line_number": 1,
+          "description": "Password is hardcoded in source code",
+          "fix": "Move password to environment variables or secure configuration"
+        },
+        {
+          "severity": "HIGH",
+          "cwe_id": "CWE-89",
+          "title": "SQL injection vulnerability",
+          "line_number": 2,
+          "description": "User input is directly interpolated into SQL query",
+          "fix": "Use parameterized queries"
+        },
+        {
+          "severity": "CRITICAL",
+          "cwe_id": "CWE-78",
+          "title": "OS command injection",
+          "line_number": 3,
+          "description": "User input passed to shell command without sanitization",
+          "fix": "Use subprocess with proper input validation"
+        },
+        {
+          "severity": "MEDIUM",
+          "cwe_id": "CWE-79",
+          "title": "Cross-site scripting",
+          "line_number": 4,
+          "description": "User input rendered in HTML without escaping",
+          "fix": "HTML escape user input"
+        }
+      ],
+      "risk_level": "CRITICAL",
+      "recommendation": "BLOCK",
+      "findings_count": 4
+    }
+  },
+  {
+    "input": {
+      "code": "import yaml\nimport hashlib\ndef process_config(config_data):\n    config = yaml.load(config_data)\n    hash_val = hashlib.sha1(config['password'].encode()).hexdigest()\n    return hash_val",
+      "file_path": "config/processor.py",
+      "context": "Configuration processing with weak crypto"
+    },
+    "expected_output": {
+      "findings": [
+        {
+          "severity": "HIGH",
+          "cwe_id": "CWE-502",
+          "title": "Insecure YAML deserialization",
+          "line_number": 4,
+          "description": "yaml.load() on untrusted data allows arbitrary code execution",
+          "fix": "Use yaml.safe_load() instead of yaml.load()"
+        },
+        {
+          "severity": "HIGH",
+          "cwe_id": "CWE-327",
+          "title": "Weak cryptographic hash",
+          "line_number": 5,
+          "description": "SHA1 is cryptographically weak for password hashing",
+          "fix": "Use bcrypt, scrypt, or Argon2 for password hashing"
+        }
+      ],
+      "risk_level": "HIGH",
+      "recommendation": "BLOCK",
+      "findings_count": 2
+    }
+  },
+  {
+    "input": {
+      "code": "",
+      "file_path": "",
+      "context": ""
+    },
+    "expected_output": {
+      "findings": [],
+      "risk_level": "NONE",
+      "recommendation": "APPROVE",
+      "findings_count": 0
+    }
+  },
+  {
+    "input": {
+      "code": "# This is a comment with potential issues\n# password = \"admin123\" but it's commented out\ndef safe_function():\n    x = 1 + 1\n    return x",
+      "file_path": "edge_case.py",
+      "context": "Edge case with commented credentials"
+    },
+    "expected_output": {
+      "findings": [
+        {
+          "severity": "LOW",
+          "cwe_id": "CWE-798",
+          "title": "Commented hardcoded credential",
+          "line_number": 2,
+          "description": "Password found in comments may indicate security risk",
+          "fix": "Remove sensitive information from comments"
+        }
+      ],
+      "risk_level": "LOW",
+      "recommendation": "APPROVE",
+      "findings_count": 1
+    }
+  }
+]

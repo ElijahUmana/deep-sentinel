@@ -1,0 +1,67 @@
+{
+  "trace_id": "baseline_001",
+  "input_data": {
+    "code": "API_KEY = \"sk-1234567890abcdef\"\nSECRET_TOKEN = \"ghp_xxxxxxxxxxxxxxxxxxxx\"\ndb_password = \"admin123\"",
+    "file_path": "config.py",
+    "context": "Application configuration"
+  },
+  "output_data": {
+    "findings": [
+      {
+        "severity": "CRITICAL",
+        "cwe_id": "CWE-798",
+        "title": "Hardcoded API Key",
+        "line_number": 1,
+        "description": "API key is hardcoded in source code, exposing sensitive credentials",
+        "fix": "Use environment variables or secure configuration management to store API keys"
+      },
+      {
+        "severity": "CRITICAL",
+        "cwe_id": "CWE-798",
+        "title": "Hardcoded Secret Token",
+        "line_number": 2,
+        "description": "Secret token is hardcoded in source code, exposing sensitive credentials",
+        "fix": "Use environment variables or secure configuration management to store secret tokens"
+      },
+      {
+        "severity": "CRITICAL",
+        "cwe_id": "CWE-798",
+        "title": "Hardcoded Database Password",
+        "line_number": 3,
+        "description": "Database password is hardcoded in source code, exposing sensitive credentials",
+        "fix": "Use environment variables or secure configuration management to store database passwords"
+      }
+    ],
+    "risk_level": "CRITICAL",
+    "recommendation": "BLOCK",
+    "findings_count": 3
+  },
+  "spans": [
+    {
+      "span_type": "llm_call",
+      "name": "claude-sonnet-4-20250514",
+      "start_time": 1774643554.681097,
+      "end_time": 1774643559.026634,
+      "latency_ms": 4345.536947250366,
+      "metadata": {
+        "model": "claude-sonnet-4-20250514",
+        "messages_count": 2,
+        "tools_provided": [],
+        "response_content": "{\n  \"findings\": [\n    {\n      \"severity\": \"CRITICAL\",\n      \"cwe_id\": \"CWE-798\",\n      \"title\": \"Hardcoded API Key\",\n      \"line_number\": 1,\n      \"description\": \"API key is hardcoded in source code, exposing sensitive credentials\",\n      \"fix\": \"Use environment variables or secure configuration management to store API keys\"\n    },\n    {\n      \"severity\": \"CRITICAL\", \n      \"cwe_id\": \"CWE-798\",\n      \"title\": \"Hardcoded Secret Token\",\n      \"line_number\": 2,\n      \"description\": \"Secret token is hardcoded in source code, exposing sensitive credentials\",\n      \"fix\": \"Use environment variables or secure configuration management to store secret tokens\"\n    },\n    {\n      \"severity\": \"CRITICAL\",\n      \"cwe_id\": \"CWE-798\", \n      \"title\": \"Hardcoded Database Password\",\n      \"line_number\": 3,\n      \"description\": \"Database password is hardcoded in source code, exposing sensitive credentials\",\n      \"fix\": \"Use environment variables or secure configuration management to store database passwords\"\n    }\n  ],\n  \"risk_level\": \"CRITICAL\",\n  \"recommendation\": \"BLOCK\"\n}",
+        "tool_calls": [],
+        "prompt_tokens": 513,
+        "completion_tokens": 313,
+        "total_tokens": 826,
+        "cost": 0.006234
+      },
+      "error": null
+    }
+  ],
+  "start_time": 1774643554.68109,
+  "end_time": 1774643559.026816,
+  "total_latency_ms": 4345.725774765015,
+  "total_tokens": 826,
+  "total_cost": 0.006234,
+  "score": 0.0,
+  "error": null
+}

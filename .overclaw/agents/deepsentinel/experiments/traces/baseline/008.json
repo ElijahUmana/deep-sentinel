@@ -1,0 +1,42 @@
+{
+  "trace_id": "baseline_008",
+  "input_data": {
+    "code": "def safe_function():\n    return \"Hello, World!\"",
+    "file_path": "utils/helpers.py",
+    "context": "Utility helper functions"
+  },
+  "output_data": {
+    "findings": [],
+    "risk_level": "NONE",
+    "recommendation": "APPROVE",
+    "findings_count": 0
+  },
+  "spans": [
+    {
+      "span_type": "llm_call",
+      "name": "claude-sonnet-4-20250514",
+      "start_time": 1774643558.4279811,
+      "end_time": 1774643560.280846,
+      "latency_ms": 1852.8649806976318,
+      "metadata": {
+        "model": "claude-sonnet-4-20250514",
+        "messages_count": 2,
+        "tools_provided": [],
+        "response_content": "{\"findings\": [], \"risk_level\": \"NONE\", \"recommendation\": \"APPROVE\"}",
+        "tool_calls": [],
+        "prompt_tokens": 492,
+        "completion_tokens": 23,
+        "total_tokens": 515,
+        "cost": 0.0018210000000000001
+      },
+      "error": null
+    }
+  ],
+  "start_time": 1774643558.427965,
+  "end_time": 1774643560.281056,
+  "total_latency_ms": 1853.0910015106201,
+  "total_tokens": 515,
+  "total_cost": 0.0018210000000000001,
+  "score": 0.0,
+  "error": null
+}

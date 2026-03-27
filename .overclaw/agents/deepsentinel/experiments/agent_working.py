@@ -1,0 +1,103 @@
+"""
+OverClaw-compatible entrypoint for DeepSentinel.
+This allows Overmind's OverClaw to optimize our security analysis prompts.
+"""
+import json
+import re
+from overclaw.core.tracer import call_llm
+
+
+def run(input: dict) -> dict:
+    """Analyze code for security vulnerabilities. OverClaw will optimize this."""
+    code = input.get("code", "")
+    file_path = input.get("file_path", "unknown")
+    context = input.get("context", "")
+
+    response = call_llm(
+        model="claude-sonnet-4-20250514",
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are a security vulnerability scanner. Analyze the provided code for security vulnerabilities.\n\n"
+                    "Check for these CWE categories:\n"
+                    "- CWE-798: Hardcoded credentials (passwords, API keys, secrets in source)\n"
+                    "- CWE-89: SQL injection (unsanitized input in SQL queries)\n"
+                    "- CWE-78: OS command injection (unsanitized input in shell commands)\n"
+                    "- CWE-79: Cross-site scripting (unsanitized input in HTML output)\n"
+                    "- CWE-22: Path traversal (unsanitized input in file paths)\n"
+                    "- CWE-327: Weak cryptography (MD5, SHA1 for passwords, weak ciphers)\n"
+                    "- CWE-502: Insecure deserialization (pickle.loads, yaml.load on untrusted data)\n"
+                    "- CWE-918: SSRF (user-controlled URLs in server-side requests)\n"
+                    "- CWE-601: Open redirect (user-controlled redirect targets)\n"
+                    "- CWE-95: Code injection (eval/exec on user input)\n\n"
+                    "RESPOND WITH ONLY A JSON OBJECT. No markdown, no backticks, no explanation text.\n\n"
+                    "Required JSON schema:\n"
+                    "{\"findings\": [{\"severity\": \"CRITICAL|HIGH|MEDIUM|LOW\", \"cwe_id\": \"CWE-XXX\", "
+                    "\"title\": \"short title\", \"line_number\": N, \"description\": \"what is wrong\", "
+                    "\"fix\": \"how to fix it\"}], \"risk_level\": \"CRITICAL|HIGH|MEDIUM|LOW|NONE\", "
+                    "\"recommendation\": \"BLOCK|REVIEW|APPROVE\"}\n\n"
+                    "Rules:\n"
+                    "- risk_level = highest severity among findings, or NONE if no findings\n"
+                    "- recommendation = BLOCK if risk is CRITICAL or HIGH, REVIEW if MEDIUM, APPROVE if LOW or NONE\n"
+                    "- If the code has no vulnerabilities, return {\"findings\": [], \"risk_level\": \"NONE\", \"recommendation\": \"APPROVE\"}"
+                ),
+            },
+            {
+                "role": "user",
+                "content": f"File: {file_path}\nContext: {context}\n\nCode:\n```\n{code}\n```",
+            },
+        ],
+    )
+
+    # Extract content from litellm response object
+    if hasattr(response, "choices") and response.choices:
+        content = response.choices[0].message.content or ""
+    elif isinstance(response, dict):
+        content = response.get("content", "")
+    else:
+        content = str(response)
+
+    try:
+        # Try to extract JSON from response
+        if "```json" in content:
+            content = content.split("```json")[1].split("```")[0]
+        elif "```" in content:
+            content = content.split("```")[1].split("```")[0]
+
+        # Also try to find JSON object directly
+        stripped = content.strip()
+        if not stripped.startswith("{"):
+            match = re.search(r"\{[\s\S]*\}", stripped)
+            if match:
+                stripped = match.group(0)
+            else:
+                stripped = content.strip()
+
+        result = json.loads(stripped)
+        findings = result.get("findings", [])
+        risk_level = result.get("risk_level", "UNKNOWN")
+        recommendation = result.get("recommendation", "REVIEW")
+
+        # Enforce consistency: CRITICAL/HIGH -> BLOCK, LOW/NONE -> APPROVE
+        if risk_level in ("CRITICAL", "HIGH") and recommendation != "BLOCK":
+            recommendation = "BLOCK"
+        elif risk_level in ("LOW", "NONE") and recommendation != "APPROVE":
+            recommendation = "APPROVE"
+
+        return {
+            "findings": findings,
+            "risk_level": risk_level,
+            "recommendation": recommendation,
+            "findings_count": len(findings),
+        }
+    except (json.JSONDecodeError, IndexError, AttributeError):
+        # Regex fallback for finding count
+        finding_count = len(re.findall(r"CWE-\d+", content))
+        return {
+            "findings": [],
+            "risk_level": "UNKNOWN",
+            "recommendation": "REVIEW",
+            "findings_count": finding_count,
+            "raw_analysis": content[:500],
+        }

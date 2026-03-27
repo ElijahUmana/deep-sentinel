@@ -1,0 +1,51 @@
+{
+  "trace_id": "baseline_003",
+  "input_data": {
+    "code": "def display_message(message):\n    return f\"<div>{message}</div>\"",
+    "file_path": "templates/helpers.py",
+    "context": "Template helper functions"
+  },
+  "output_data": {
+    "findings": [
+      {
+        "severity": "HIGH",
+        "cwe_id": "CWE-79",
+        "title": "Cross-site scripting vulnerability in message display",
+        "line_number": 2,
+        "description": "The message parameter is directly inserted into HTML without any sanitization or escaping, allowing potential XSS attacks if user-controlled data is passed to this function",
+        "fix": "Use HTML escaping on the message parameter, such as html.escape(message) or use a template engine with auto-escaping enabled"
+      }
+    ],
+    "risk_level": "HIGH",
+    "recommendation": "BLOCK",
+    "findings_count": 1
+  },
+  "spans": [
+    {
+      "span_type": "llm_call",
+      "name": "claude-sonnet-4-20250514",
+      "start_time": 1774643554.681272,
+      "end_time": 1774643558.11593,
+      "latency_ms": 3434.6580505371094,
+      "metadata": {
+        "model": "claude-sonnet-4-20250514",
+        "messages_count": 2,
+        "tools_provided": [],
+        "response_content": "{\"findings\": [{\"severity\": \"HIGH\", \"cwe_id\": \"CWE-79\", \"title\": \"Cross-site scripting vulnerability in message display\", \"line_number\": 2, \"description\": \"The message parameter is directly inserted into HTML without any sanitization or escaping, allowing potential XSS attacks if user-controlled data is passed to this function\", \"fix\": \"Use HTML escaping on the message parameter, such as html.escape(message) or use a template engine with auto-escaping enabled\"}], \"risk_level\": \"HIGH\", \"recommendation\": \"BLOCK\"}",
+        "tool_calls": [],
+        "prompt_tokens": 497,
+        "completion_tokens": 134,
+        "total_tokens": 631,
+        "cost": 0.003501
+      },
+      "error": null
+    }
+  ],
+  "start_time": 1774643554.681268,
+  "end_time": 1774643558.116235,
+  "total_latency_ms": 3434.967041015625,
+  "total_tokens": 631,
+  "total_cost": 0.003501,
+  "score": 0.0,
+  "error": null
+}

@@ -1,0 +1,42 @@
+{
+  "trace_id": "baseline_011",
+  "input_data": {
+    "code": "# This is a comment with potential issues\n# password = \"admin123\" but it's commented out\ndef safe_function():\n    x = 1 + 1\n    return x",
+    "file_path": "edge_case.py",
+    "context": "Edge case with commented credentials"
+  },
+  "output_data": {
+    "findings": [],
+    "risk_level": "NONE",
+    "recommendation": "APPROVE",
+    "findings_count": 0
+  },
+  "spans": [
+    {
+      "span_type": "llm_call",
+      "name": "claude-sonnet-4-20250514",
+      "start_time": 1774643561.034467,
+      "end_time": 1774643562.708118,
+      "latency_ms": 1673.6509799957275,
+      "metadata": {
+        "model": "claude-sonnet-4-20250514",
+        "messages_count": 2,
+        "tools_provided": [],
+        "response_content": "{\"findings\": [], \"risk_level\": \"NONE\", \"recommendation\": \"APPROVE\"}",
+        "tool_calls": [],
+        "prompt_tokens": 521,
+        "completion_tokens": 23,
+        "total_tokens": 544,
+        "cost": 0.001908
+      },
+      "error": null
+    }
+  ],
+  "start_time": 1774643561.034452,
+  "end_time": 1774643562.7083662,
+  "total_latency_ms": 1673.9141941070557,
+  "total_tokens": 544,
+  "total_cost": 0.001908,
+  "score": 0.0,
+  "error": null
+}

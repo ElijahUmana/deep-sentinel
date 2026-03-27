@@ -1,0 +1,51 @@
+{
+  "trace_id": "baseline_000",
+  "input_data": {
+    "code": "def get_user(user_id):\n    query = f\"SELECT * FROM users WHERE id = {user_id}\"\n    return db.execute(query)",
+    "file_path": "app/models.py",
+    "context": "User authentication module"
+  },
+  "output_data": {
+    "findings": [
+      {
+        "severity": "CRITICAL",
+        "cwe_id": "CWE-89",
+        "title": "SQL Injection vulnerability",
+        "line_number": 2,
+        "description": "User input 'user_id' is directly interpolated into SQL query without sanitization, allowing SQL injection attacks",
+        "fix": "Use parameterized queries: query = 'SELECT * FROM users WHERE id = %s' and db.execute(query, (user_id,))"
+      }
+    ],
+    "risk_level": "CRITICAL",
+    "recommendation": "BLOCK",
+    "findings_count": 1
+  },
+  "spans": [
+    {
+      "span_type": "llm_call",
+      "name": "claude-sonnet-4-20250514",
+      "start_time": 1774643554.680981,
+      "end_time": 1774643557.4036689,
+      "latency_ms": 2722.6879596710205,
+      "metadata": {
+        "model": "claude-sonnet-4-20250514",
+        "messages_count": 2,
+        "tools_provided": [],
+        "response_content": "{\"findings\": [{\"severity\": \"CRITICAL\", \"cwe_id\": \"CWE-89\", \"title\": \"SQL Injection vulnerability\", \"line_number\": 2, \"description\": \"User input 'user_id' is directly interpolated into SQL query without sanitization, allowing SQL injection attacks\", \"fix\": \"Use parameterized queries: query = 'SELECT * FROM users WHERE id = %s' and db.execute(query, (user_id,))\"}], \"risk_level\": \"CRITICAL\", \"recommendation\": \"BLOCK\"}",
+        "tool_calls": [],
+        "prompt_tokens": 514,
+        "completion_tokens": 127,
+        "total_tokens": 641,
+        "cost": 0.003447
+      },
+      "error": null
+    }
+  ],
+  "start_time": 1774643554.68097,
+  "end_time": 1774643557.403887,
+  "total_latency_ms": 2722.917079925537,
+  "total_tokens": 641,
+  "total_cost": 0.003447,
+  "score": 0.0,
+  "error": null
+}

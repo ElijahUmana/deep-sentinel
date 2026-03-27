@@ -1,0 +1,51 @@
+{
+  "trace_id": "baseline_005",
+  "input_data": {
+    "code": "import hashlib\ndef hash_password(password):\n    return hashlib.md5(password.encode()).hexdigest()",
+    "file_path": "auth/crypto.py",
+    "context": "Password hashing utility"
+  },
+  "output_data": {
+    "findings": [
+      {
+        "severity": "HIGH",
+        "cwe_id": "CWE-327",
+        "title": "Weak cryptographic hash function MD5 used for password hashing",
+        "line_number": 3,
+        "description": "MD5 is cryptographically broken and unsuitable for password hashing. It's vulnerable to collision attacks and can be cracked quickly with modern hardware. Password hashes should use secure, slow hashing algorithms designed specifically for passwords.",
+        "fix": "Replace MD5 with a secure password hashing algorithm like bcrypt, scrypt, or Argon2. Use Python's bcrypt library: bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())"
+      }
+    ],
+    "risk_level": "HIGH",
+    "recommendation": "BLOCK",
+    "findings_count": 1
+  },
+  "spans": [
+    {
+      "span_type": "llm_call",
+      "name": "claude-sonnet-4-20250514",
+      "start_time": 1774643557.40534,
+      "end_time": 1774643561.0326889,
+      "latency_ms": 3627.3488998413086,
+      "metadata": {
+        "model": "claude-sonnet-4-20250514",
+        "messages_count": 2,
+        "tools_provided": [],
+        "response_content": "{\"findings\": [{\"severity\": \"HIGH\", \"cwe_id\": \"CWE-327\", \"title\": \"Weak cryptographic hash function MD5 used for password hashing\", \"line_number\": 3, \"description\": \"MD5 is cryptographically broken and unsuitable for password hashing. It's vulnerable to collision attacks and can be cracked quickly with modern hardware. Password hashes should use secure, slow hashing algorithms designed specifically for passwords.\", \"fix\": \"Replace MD5 with a secure password hashing algorithm like bcrypt, scrypt, or Argon2. Use Python's bcrypt library: bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())\"}], \"risk_level\": \"HIGH\", \"recommendation\": \"BLOCK\"}",
+        "tool_calls": [],
+        "prompt_tokens": 507,
+        "completion_tokens": 179,
+        "total_tokens": 686,
+        "cost": 0.004206
+      },
+      "error": null
+    }
+  ],
+  "start_time": 1774643557.405322,
+  "end_time": 1774643561.032845,
+  "total_latency_ms": 3627.5229454040527,
+  "total_tokens": 686,
+  "total_cost": 0.004206,
+  "score": 0.0,
+  "error": null
+}

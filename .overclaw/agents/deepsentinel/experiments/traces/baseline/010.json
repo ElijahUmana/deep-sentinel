@@ -1,0 +1,59 @@
+{
+  "trace_id": "baseline_010",
+  "input_data": {
+    "code": "import yaml\nimport hashlib\ndef process_config(config_data):\n    config = yaml.load(config_data)\n    hash_val = hashlib.sha1(config['password'].encode()).hexdigest()\n    return hash_val",
+    "file_path": "config/processor.py",
+    "context": "Configuration processing with weak crypto"
+  },
+  "output_data": {
+    "findings": [
+      {
+        "severity": "HIGH",
+        "cwe_id": "CWE-502",
+        "title": "Insecure YAML deserialization",
+        "line_number": 4,
+        "description": "Using yaml.load() without a Loader parameter enables arbitrary code execution when processing untrusted YAML data",
+        "fix": "Use yaml.safe_load() instead of yaml.load() or specify a safe loader like yaml.load(config_data, Loader=yaml.SafeLoader)"
+      },
+      {
+        "severity": "HIGH",
+        "cwe_id": "CWE-327",
+        "title": "Weak cryptographic hash function for password",
+        "line_number": 5,
+        "description": "SHA1 is cryptographically weak and unsuitable for password hashing due to collision vulnerabilities and lack of salt",
+        "fix": "Use a strong password hashing algorithm like bcrypt, scrypt, or Argon2, or at minimum use SHA-256 with proper salting"
+      }
+    ],
+    "risk_level": "HIGH",
+    "recommendation": "BLOCK",
+    "findings_count": 2
+  },
+  "spans": [
+    {
+      "span_type": "llm_call",
+      "name": "claude-sonnet-4-20250514",
+      "start_time": 1774643560.283552,
+      "end_time": 1774643565.560868,
+      "latency_ms": 5277.316093444824,
+      "metadata": {
+        "model": "claude-sonnet-4-20250514",
+        "messages_count": 2,
+        "tools_provided": [],
+        "response_content": "{\n  \"findings\": [\n    {\n      \"severity\": \"HIGH\",\n      \"cwe_id\": \"CWE-502\",\n      \"title\": \"Insecure YAML deserialization\",\n      \"line_number\": 4,\n      \"description\": \"Using yaml.load() without a Loader parameter enables arbitrary code execution when processing untrusted YAML data\",\n      \"fix\": \"Use yaml.safe_load() instead of yaml.load() or specify a safe loader like yaml.load(config_data, Loader=yaml.SafeLoader)\"\n    },\n    {\n      \"severity\": \"HIGH\",\n      \"cwe_id\": \"CWE-327\",\n      \"title\": \"Weak cryptographic hash function for password\",\n      \"line_number\": 5,\n      \"description\": \"SHA1 is cryptographically weak and unsuitable for password hashing due to collision vulnerabilities and lack of salt\",\n      \"fix\": \"Use a strong password hashing algorithm like bcrypt, scrypt, or Argon2, or at minimum use SHA-256 with proper salting\"\n    }\n  ],\n  \"risk_level\": \"HIGH\",\n  \"recommendation\": \"BLOCK\"\n}",
+        "tool_calls": [],
+        "prompt_tokens": 536,
+        "completion_tokens": 284,
+        "total_tokens": 820,
+        "cost": 0.005868
+      },
+      "error": null
+    }
+  ],
+  "start_time": 1774643560.2835379,
+  "end_time": 1774643565.56114,
+  "total_latency_ms": 5277.602195739746,
+  "total_tokens": 820,
+  "total_cost": 0.005868,
+  "score": 0.0,
+  "error": null
+}

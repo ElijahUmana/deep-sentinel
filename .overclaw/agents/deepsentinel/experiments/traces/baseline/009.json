@@ -1,0 +1,75 @@
+{
+  "trace_id": "baseline_009",
+  "input_data": {
+    "code": "password = \"secret123\"\nquery = f\"SELECT * FROM users WHERE id = {user_id}\"\nos.system(f\"rm {filename}\")\nreturn f\"<p>{message}</p>\"",
+    "file_path": "vulnerable.py",
+    "context": "Multiple vulnerability example"
+  },
+  "output_data": {
+    "findings": [
+      {
+        "severity": "HIGH",
+        "cwe_id": "CWE-798",
+        "title": "Hardcoded Password",
+        "line_number": 1,
+        "description": "Password is hardcoded in source code, making it visible to anyone with access to the code",
+        "fix": "Store password in environment variables or secure configuration files"
+      },
+      {
+        "severity": "CRITICAL",
+        "cwe_id": "CWE-89",
+        "title": "SQL Injection",
+        "line_number": 2,
+        "description": "User input 'user_id' is directly interpolated into SQL query without sanitization, allowing SQL injection attacks",
+        "fix": "Use parameterized queries or prepared statements instead of string formatting"
+      },
+      {
+        "severity": "CRITICAL",
+        "cwe_id": "CWE-78",
+        "title": "OS Command Injection",
+        "line_number": 3,
+        "description": "User-controlled 'filename' variable is directly passed to os.system without sanitization, allowing command injection",
+        "fix": "Use subprocess with shell=False and validate/sanitize filename input, or use safer file operations"
+      },
+      {
+        "severity": "MEDIUM",
+        "cwe_id": "CWE-79",
+        "title": "Cross-Site Scripting (XSS)",
+        "line_number": 4,
+        "description": "User input 'message' is directly embedded in HTML output without escaping, allowing XSS attacks",
+        "fix": "HTML-encode the message content before embedding in HTML or use templating engines with auto-escaping"
+      }
+    ],
+    "risk_level": "CRITICAL",
+    "recommendation": "BLOCK",
+    "findings_count": 4
+  },
+  "spans": [
+    {
+      "span_type": "llm_call",
+      "name": "claude-sonnet-4-20250514",
+      "start_time": 1774643559.028169,
+      "end_time": 1774643565.571614,
+      "latency_ms": 6543.445110321045,
+      "metadata": {
+        "model": "claude-sonnet-4-20250514",
+        "messages_count": 2,
+        "tools_provided": [],
+        "response_content": "{\n  \"findings\": [\n    {\n      \"severity\": \"HIGH\",\n      \"cwe_id\": \"CWE-798\",\n      \"title\": \"Hardcoded Password\",\n      \"line_number\": 1,\n      \"description\": \"Password is hardcoded in source code, making it visible to anyone with access to the code\",\n      \"fix\": \"Store password in environment variables or secure configuration files\"\n    },\n    {\n      \"severity\": \"CRITICAL\",\n      \"cwe_id\": \"CWE-89\",\n      \"title\": \"SQL Injection\",\n      \"line_number\": 2,\n      \"description\": \"User input 'user_id' is directly interpolated into SQL query without sanitization, allowing SQL injection attacks\",\n      \"fix\": \"Use parameterized queries or prepared statements instead of string formatting\"\n    },\n    {\n      \"severity\": \"CRITICAL\",\n      \"cwe_id\": \"CWE-78\",\n      \"title\": \"OS Command Injection\",\n      \"line_number\": 3,\n      \"description\": \"User-controlled 'filename' variable is directly passed to os.system without sanitization, allowing command injection\",\n      \"fix\": \"Use subprocess with shell=False and validate/sanitize filename input, or use safer file operations\"\n    },\n    {\n      \"severity\": \"MEDIUM\",\n      \"cwe_id\": \"CWE-79\",\n      \"title\": \"Cross-Site Scripting (XSS)\",\n      \"line_number\": 4,\n      \"description\": \"User input 'message' is directly embedded in HTML output without escaping, allowing XSS attacks\",\n      \"fix\": \"HTML-encode the message content before embedding in HTML or use templating engines with auto-escaping\"\n    }\n  ],\n  \"risk_level\": \"CRITICAL\",\n  \"recommendation\": \"BLOCK\"\n}",
+        "tool_calls": [],
+        "prompt_tokens": 521,
+        "completion_tokens": 445,
+        "total_tokens": 966,
+        "cost": 0.008238
+      },
+      "error": null
+    }
+  ],
+  "start_time": 1774643559.0281549,
+  "end_time": 1774643565.571894,
+  "total_latency_ms": 6543.739080429077,
+  "total_tokens": 966,
+  "total_cost": 0.008238,
+  "score": 0.0,
+  "error": null
+}

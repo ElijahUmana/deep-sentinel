@@ -1,0 +1,51 @@
+{
+  "trace_id": "baseline_007",
+  "input_data": {
+    "code": "def execute_code(user_code):\n    return eval(user_code)",
+    "file_path": "sandbox/executor.py",
+    "context": "Code execution sandbox"
+  },
+  "output_data": {
+    "findings": [
+      {
+        "severity": "CRITICAL",
+        "cwe_id": "CWE-95",
+        "title": "Code injection via eval() on user input",
+        "line_number": 2,
+        "description": "The eval() function is called directly on user_code parameter without any sanitization or validation. This allows arbitrary code execution including system commands, file operations, and malicious code that could compromise the entire system.",
+        "fix": "Replace eval() with a safe alternative like ast.literal_eval() for safe expression evaluation, or implement a proper sandboxed execution environment with restricted builtins and imports. Consider using libraries like RestrictedPython for safer code execution."
+      }
+    ],
+    "risk_level": "CRITICAL",
+    "recommendation": "BLOCK",
+    "findings_count": 1
+  },
+  "spans": [
+    {
+      "span_type": "llm_call",
+      "name": "claude-sonnet-4-20250514",
+      "start_time": 1774643558.118298,
+      "end_time": 1774643562.5674398,
+      "latency_ms": 4449.14174079895,
+      "metadata": {
+        "model": "claude-sonnet-4-20250514",
+        "messages_count": 2,
+        "tools_provided": [],
+        "response_content": "{\"findings\": [{\"severity\": \"CRITICAL\", \"cwe_id\": \"CWE-95\", \"title\": \"Code injection via eval() on user input\", \"line_number\": 2, \"description\": \"The eval() function is called directly on user_code parameter without any sanitization or validation. This allows arbitrary code execution including system commands, file operations, and malicious code that could compromise the entire system.\", \"fix\": \"Replace eval() with a safe alternative like ast.literal_eval() for safe expression evaluation, or implement a proper sandboxed execution environment with restricted builtins and imports. Consider using libraries like RestrictedPython for safer code execution.\"}], \"risk_level\": \"CRITICAL\", \"recommendation\": \"BLOCK\"}",
+        "tool_calls": [],
+        "prompt_tokens": 496,
+        "completion_tokens": 166,
+        "total_tokens": 662,
+        "cost": 0.003978
+      },
+      "error": null
+    }
+  ],
+  "start_time": 1774643558.1182778,
+  "end_time": 1774643562.56772,
+  "total_latency_ms": 4449.442148208618,
+  "total_tokens": 662,
+  "total_cost": 0.003978,
+  "score": 0.0,
+  "error": null
+}
