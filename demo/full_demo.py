@@ -639,27 +639,30 @@ async def demo():
     print()
 
     # 5e: Fork database for safe experimentation
-    print(f"  [Ghost Fork] Creating ephemeral fork for safe experiment...")
-    print(f"  [Ghost] Running: ghost fork {db_id} --name experiment-{scan_id[:6]}")
-    fork_result = GhostDB.fork_database(db_id, f"experiment-{scan_id[:6]}")
-    fork_output = fork_result.get("output", "")
-    fork_conn = fork_result.get("connection", "")
-    if fork_output:
-        for line in fork_output.split("\n"):
-            if line.strip():
-                print(f"    {line.strip()}")
-    else:
-        print(f"    Fork created (see ghost list)")
+    # Ghost's key feature: instant database forking (like git branches for data)
+    # We use an existing running fork to demonstrate experiments without affecting main DB
+    print(f"  [Ghost Fork] Using fork for safe experiment (main DB untouched)...")
 
-    # Run an experimental query in the fork (safe -- doesn't touch main DB)
-    if fork_conn or fork_output:
-        # Extract the actual Ghost fork ID from the output (e.g. "ID: irakrp9ts2")
-        fork_db_id = None
+    # Find a running fork, or create one
+    ghost_list = GhostDB.ghost_cli("list")
+    fork_db_id = None
+    for line in ghost_list.split("\n"):
+        if "experiment" in line and "running" in line:
+            fork_db_id = line.strip().split()[0]
+            break
+
+    if not fork_db_id:
+        # Create a new fork
+        print(f"  [Ghost] Running: ghost fork {db_id} --name experiment-{scan_id[:6]}")
+        fork_result = GhostDB.fork_database(db_id, f"experiment-{scan_id[:6]}")
+        fork_output = fork_result.get("output", "")
         for line in fork_output.split("\n"):
             if line.strip().startswith("ID:"):
                 fork_db_id = line.strip().split("ID:")[-1].strip()
-                break
-        if fork_db_id:
+    else:
+        print(f"  [Ghost] Using existing fork: {fork_db_id}")
+
+    if fork_db_id:
             print(f"\n  [Ghost Fork] Running experimental query in fork {fork_db_id} (safe -- main DB untouched)...")
             experiment_result = GhostDB.experiment_in_fork(
                 fork_db_id,
