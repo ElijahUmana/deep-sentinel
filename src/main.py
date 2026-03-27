@@ -107,6 +107,30 @@ class DeepSentinel:
         print("[1/6] Gathering cross-source context via Airbyte connectors...")
         context = await self.data.gather_full_context(owner, repo, pr_number)
 
+        # Pull GitHub Issues + PR comments as additional cross-source context
+        issue_ctx = await self.data.gather_github_intelligence(owner, repo, pr_number)
+        print(f"  GitHub Issues: {len(issue_ctx.issues)} security-related")
+        print(f"  PR Comments: {len(issue_ctx.pr_comments)} security-relevant")
+
+        # Build cross-source correlations from real GitHub data
+        issue_correlations = self.data.correlate_issues_with_code(
+            context.github.changed_files, issue_ctx, pr_number
+        )
+        # Merge with Slack-based correlations
+        all_correlations = context.correlations + issue_correlations
+        print(f"  Cross-source correlations: {len(all_correlations)} total")
+
+        # Build context strings from GitHub issues/comments for LLM
+        github_context = []
+        for issue in issue_ctx.issues:
+            github_context.append(
+                f"Issue #{issue['number']}: {issue['title']} -- {issue.get('body', '')[:150]}"
+            )
+        for comment in issue_ctx.pr_comments:
+            github_context.append(
+                f"PR review by {comment.get('user', 'reviewer')}: {comment.get('body', '')[:150]}"
+            )
+
         # ============================
         # STEP 2: UNDERSTAND (Macroscope)
         # ============================
@@ -123,9 +147,9 @@ class DeepSentinel:
         print("\n[3/6] Checking Aerospike cache...")
         cached = self.cache.get_cached_scan(f"{owner}/{repo}", pr_number, scan_id[:8])
         if cached:
-            print("  Cache HIT — returning cached results")
+            print("  Cache HIT -- returning cached results")
             return cached
-        print("  Cache MISS — proceeding with full analysis")
+        print("  Cache MISS -- proceeding with full analysis")
 
         # Get historical patterns from Ghost
         historical = await self.db.get_historical_patterns(owner, repo)
@@ -137,14 +161,18 @@ class DeepSentinel:
         print("\n[4/6] Running security analysis via TrueFoundry AI Gateway...")
         print("  (All LLM calls instrumented by Overmind for optimization)")
 
+        # Combine Slack messages + GitHub issue/comment context
+        slack_context = [m.get("text", "")[:200] for m in context.slack.messages[:5]]
+        combined_context = github_context + slack_context
+
         analysis_context = {
             "files": context.github.changed_files,
             "architecture": file_contexts,
-            "slack_context": [m.get("text", "")[:200] for m in context.slack.messages[:5]],
+            "slack_context": combined_context,
             "historical_patterns": [
                 {"cwe": h.get("cwe_id", ""), "count": h.get("count", 0)} for h in historical
             ],
-            "correlations": context.correlations[:10],
+            "correlations": all_correlations[:10],
         }
 
         findings = self.analyzer.analyze(analysis_context)
@@ -177,7 +205,7 @@ class DeepSentinel:
             finding["pr_number"] = pr_number
             await self.db.record_vulnerability(finding)
 
-        for corr in context.correlations:
+        for corr in all_correlations:
             await self.db.record_correlation(scan_id, corr)
 
         await self.db.complete_scan(scan_id, len(findings), critical_count, high_count)
@@ -209,12 +237,12 @@ class DeepSentinel:
             else:
                 print("[Auth0 CIBA] Denied — skipping ticket creation")
 
-        report = self.analyzer.generate_report(findings, context.correlations)
+        report = self.analyzer.generate_report(findings, all_correlations)
 
         print(f"\n{'=' * 60}")
         print(f"  SCAN COMPLETE")
         print(f"  Findings: {len(findings)} ({critical_count} critical, {high_count} high)")
-        print(f"  Cross-source correlations: {len(context.correlations)}")
+        print(f"  Cross-source correlations: {len(all_correlations)}")
         print(f"  Scan ID: {scan_id}")
         print(f"{'=' * 60}\n")
 
@@ -223,7 +251,7 @@ class DeepSentinel:
         return {
             "scan_id": scan_id,
             "findings": findings,
-            "correlations": context.correlations,
+            "correlations": all_correlations,
             "report": report,
             "stats": {"total": len(findings), "critical": critical_count, "high": high_count},
         }

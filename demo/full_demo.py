@@ -140,89 +140,55 @@ async def demo():
         if f.get("content") and f["path"] not in [af["path"] for af in all_files]:
             all_files.append(f)
 
-    # Slack: Try real Airbyte Slack connector first, fall back to representative data
+    # Build cross-source context from GitHub Issues + PR comments
+    # This is the core value prop: issues and review comments represent
+    # team decisions, deferred work, and known risks that code-only
+    # scanners (Snyk, CodeQL, Semgrep) have zero visibility into.
+    from src.data.airbyte_client import GitHubIssueContext
+    issue_ctx = GitHubIssueContext(issues=security_issues, pr_comments=pr_comments)
+
+    # Build human-readable context strings from real GitHub data
+    # These replace hardcoded Slack messages -- same purpose (team context),
+    # but sourced from real, verifiable GitHub artifacts
+    slack_context = []
+    for issue in security_issues:
+        slack_context.append(
+            f"GitHub Issue #{issue['number']} ({issue.get('created_at', '')[:10]}): "
+            f"'{issue['title']}'"
+        )
+    for comment in pr_comments:
+        slack_context.append(
+            f"PR #1 review by {comment.get('user', 'unknown')} ({comment.get('created_at', '')[:10]}): "
+            f"'{comment.get('body', '')[:120]}'"
+        )
+    print(f"  [Cross-Source] {len(slack_context)} context signals from GitHub Issues + PR comments")
+    for ctx_line in slack_context:
+        print(f"    {ctx_line[:100]}...")
+
+    # Slack: Also try real Slack connector if available
     slack_data = await data.get_security_discussions()
     if slack_data.messages:
-        slack_context = [m.get("text", "") for m in slack_data.messages[:10]]
-        print(f"  [Airbyte/Slack] LIVE: {len(slack_context)} security messages from {len(slack_data.channels_searched)} channels")
-    else:
-        # Representative Slack context for demo — the Airbyte SlackConnector is
-        # fully wired and tested; it requires SLACK_BOT_TOKEN env var pointing to
-        # a workspace where the bot has been invited to channels.
-        # These messages represent the KIND of cross-source intelligence DeepSentinel finds.
-        slack_context = [
-            "John (Mar 14, #engineering): 'Let's skip input validation for the payment endpoint — we'll add it in Q2'",
-            "Sarah (Mar 15, #engineering): 'The DB password for payments is still hardcoded, can someone move it to secrets manager?'",
-            "Mike (Mar 20, #security-review): 'Has anyone reviewed the refund endpoint? It's using os.system directly'",
-            "Lisa (Mar 22, #engineering): 'The auth module uses MD5 — we need to upgrade to bcrypt before launch'",
-        ]
-        print(f"  [Airbyte/Slack] {len(slack_context)} security messages (representative — set SLACK_BOT_TOKEN for live)")
+        for m in slack_data.messages[:5]:
+            slack_context.append(m.get("text", ""))
+        print(f"  [Airbyte/Slack] LIVE: +{len(slack_data.messages)} Slack messages from {len(slack_data.channels_searched)} channels")
 
-    # Build cross-source correlations from REAL data (GitHub Issues + PR comments)
-    cross_source_correlations = []
-
-    # Correlate GitHub Issues with code changes
-    for issue in security_issues:
-        issue_text = f"{issue.get('title', '')} {issue.get('body', '')}".lower()
-        for file_info in all_files:
-            file_path = file_info.get("path", "")
-            file_name = file_path.split("/")[-1].replace(".py", "").replace(".ts", "")
-            if file_name in issue_text or any(keyword in issue_text for keyword in ["payment", "auth", "login", "user", "api"]):
-                cross_source_correlations.append({
-                    "type": "github_issue_correlation",
-                    "github_ref": f"Issue #{issue['number']}: {issue['title'][:60]}",
-                    "slack_ref": f"GitHub Issues",
-                    "risk_note": f"REAL: Issue #{issue['number']} discusses security concern related to {file_path}",
-                    "confidence": "HIGH",
-                })
-                break
-
-    # Correlate PR comments with findings
-    for comment in pr_comments:
-        cross_source_correlations.append({
-            "type": "pr_review_concern",
-            "github_ref": f"PR #1 comment by {comment.get('user', 'reviewer')}",
-            "slack_ref": "PR Review",
-            "risk_note": f"REAL: Reviewer flagged: {comment.get('body', '')[:100]}",
-            "confidence": "HIGH",
-        })
-
-    # Add Slack-based correlations (if live Slack data available, or representative)
-    cross_source_correlations.extend([
-        {
-            "type": "deferred_security_work",
-            "github_ref": f"PR #1 + repo-wide: payment.py, src/api/users.py",
-            "slack_ref": "#engineering - Mar 14",
-            "risk_note": "Input validation EXPLICITLY DEFERRED per team decision — Snyk/CodeQL cannot detect this",
-        },
-        {
-            "type": "known_issue_unresolved",
-            "github_ref": "payment.py:10, src/auth/login.py:11",
-            "slack_ref": "#engineering - Mar 15",
-            "risk_note": "Hardcoded credentials flagged by team but NOT yet remediated — known risk accumulating",
-        },
-        {
-            "type": "code_review_concern",
-            "github_ref": "payment.py:30",
-            "slack_ref": "#security-review - Mar 20",
-            "risk_note": "os.system() usage flagged by security-minded team member — still in codebase",
-        },
-        {
-            "type": "crypto_upgrade_needed",
-            "github_ref": "src/auth/login.py:17",
-            "slack_ref": "#engineering - Mar 22",
-            "risk_note": "MD5 hashing identified as needing bcrypt upgrade — pre-launch blocker acknowledged",
-        },
-    ]
+    # Build cross-source correlations using the structured correlation engine
+    cross_source_correlations = data.correlate_issues_with_code(all_files, issue_ctx, 1)
     print(f"  [Correlation Engine] {len(cross_source_correlations)} cross-source links discovered")
+    for corr in cross_source_correlations:
+        print(f"    [{corr['type']}] {corr['risk_note'][:80]}")
 
     # Show Airbyte multi-source enrichment metrics
+    code_signals = len(all_files) * 3  # approximate code-only signal count
+    context_signals = len(security_issues) + len(pr_comments)
+    cross_signals = len(cross_source_correlations)
+    sources_used = 1 + (1 if security_issues else 0) + (1 if pr_comments else 0) + (1 if slack_data.messages else 0)
     enrichment_metrics = {
-        "code_only_findings": len(all_files) * 3,  # approximate code-only signal count
-        "slack_context_findings": len(slack_context),
-        "cross_source_linked": len(cross_source_correlations),
-        "total_signals": len(all_files) * 3 + len(slack_context) + len(cross_source_correlations),
-        "sources_used": 2,
+        "code_only_findings": code_signals,
+        "slack_context_findings": context_signals,
+        "cross_source_linked": cross_signals,
+        "total_signals": code_signals + context_signals + cross_signals,
+        "sources_used": sources_used,
         "entity_cache_hits": len(data._entity_cache),
     }
     data.print_enrichment_summary(enrichment_metrics)
@@ -471,11 +437,11 @@ async def demo():
     print(f"  Code-only scan (regex patterns):    {code_only_count} findings")
     print(f"  With cross-source LLM context:    + {context_added} findings")
     print(f"  Total findings:                     {total_count} findings (+{uplift_pct:.0f}%)")
-    print(f"  Cross-source correlations:          {len(cross_source_correlations)} (Slack <-> GitHub links)")
+    print(f"  Cross-source correlations:          {len(cross_source_correlations)} (Issues + PR comments <-> code)")
     print()
     print(f"  Code-only tools (Snyk, CodeQL) would find ~{code_only_count} issues.")
-    print(f"  DeepSentinel found {total_count} issues (+{uplift_pct:.0f}%) by adding Slack context,")
-    print(f"  architecture analysis, and historical vulnerability trends.")
+    print(f"  DeepSentinel found {total_count} issues (+{uplift_pct:.0f}%) by correlating GitHub Issues,")
+    print(f"  PR review comments, architecture analysis, and historical patterns.")
     print()
 
     # Integration stats
@@ -496,11 +462,15 @@ async def demo():
 
     header("WHAT EXISTING TOOLS MISS")
     print("  Snyk, CodeQL, and GitHub Advanced Security scan CODE.")
-    print("  DeepSentinel scans CONTEXT — connecting GitHub, Slack, and architecture.")
+    print("  DeepSentinel scans CONTEXT -- correlating Issues, PR reviews, and architecture.")
     print()
     for corr in cross_source_correlations:
         print(f"  > {corr['risk_note']}")
-        print(f"    {corr['slack_ref']} <-> {corr['github_ref']}")
+        context_ref = corr.get('context_ref', corr.get('slack_ref', ''))
+        why_missed = corr.get('why_code_only_misses', '')
+        print(f"    {context_ref} <-> {corr['github_ref']}")
+        if why_missed:
+            print(f"    WHY SCANNERS MISS THIS: {why_missed}")
         print()
 
     header("INTEGRATION SUMMARY")

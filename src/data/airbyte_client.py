@@ -665,40 +665,351 @@ class AirbyteDataLayer:
         )
 
     def _correlate(self, github: PRData, slack: SlackContext) -> list:
-        """Find connections between GitHub and Slack data."""
+        """Discover cross-source correlations automatically.
+
+        This is DeepSentinel's core differentiator. Rather than hardcoding
+        correlations, it discovers connections between GitHub code changes
+        and Slack/issue discussions through multiple strategies:
+
+        1. File/module name matching between code and messages
+        2. Deferred security work detection
+        3. Unresolved known issue detection
+        4. Code review concern detection
+        5. Crypto weakness detection
+        6. PR topic matching against discussions
+
+        Each correlation gets a confidence score:
+        - HIGH: exact file name + specific keyword match
+        - MEDIUM: module-level match + keyword
+        - LOW: topic-level keyword match only
+        """
         correlations = []
+        seen_keys = set()
 
+        # Build lookup structures from GitHub data
+        file_names = {}       # "login.py" -> "src/auth/login.py"
+        module_names = set()  # "src/auth", "auth", "api"
         for file_info in github.changed_files:
-            file_path = file_info.get("path", "")
-            file_name = file_path.split("/")[-1] if file_path else ""
-            module = "/".join(file_path.split("/")[:-1]) if file_path else ""
+            fp = file_info.get("path", "")
+            if not fp:
+                continue
+            fname = fp.split("/")[-1]
+            file_names[fname.lower()] = fp
+            parts = fp.split("/")
+            for i in range(1, len(parts)):
+                module_names.add("/".join(parts[:i]))
+            for part in parts[:-1]:
+                if len(part) > 2:
+                    module_names.add(part.lower())
+            stem = fname.rsplit(".", 1)[0].lower() if "." in fname else fname.lower()
+            if len(stem) > 2:
+                module_names.add(stem)
 
-            for msg in slack.messages:
-                text = msg.get("text", "")
-                if file_name and (file_name in text or module in text):
+        # Scan every Slack message against every correlation strategy
+        for msg in slack.messages:
+            text = msg.get("text", "")
+            text_lower = text.lower()
+            channel = msg.get("channel", "unknown")
+            ts = msg.get("ts", "")
+            slack_ref = f"#{channel} - {ts}" if ts else f"#{channel}"
+
+            # --- File/module name matching ---
+            matched_files = []
+            for fname_lower, full_path in file_names.items():
+                stem = fname_lower.rsplit(".", 1)[0] if "." in fname_lower else fname_lower
+                if fname_lower in text_lower or (len(stem) > 3 and stem in text_lower):
+                    matched_files.append(full_path)
+
+            matched_modules = []
+            for mod in module_names:
+                if len(mod) > 3 and mod in text_lower:
+                    matched_modules.append(mod)
+
+            # --- Strategy: Deferred security work ---
+            deferred_hits = [kw for kw in DEFERRED_WORK_KEYWORDS if kw in text_lower]
+            if deferred_hits:
+                if matched_files:
+                    confidence, github_ref = "HIGH", ", ".join(matched_files)
+                    why = ("Team explicitly deferred security work on files in this PR. "
+                           "Code-only scanners see the vulnerability but not the decision to leave it.")
+                elif matched_modules:
+                    confidence = "MEDIUM"
+                    github_ref = f"PR #{github.number} modules: {', '.join(matched_modules[:3])}"
+                    why = ("Security work deferred for a module being changed. "
+                           "Deferral context only visible in team communication.")
+                else:
+                    confidence, github_ref = "LOW", f"PR #{github.number}"
+                    why = "Team deferred security work. Scope unclear but deferral creates accumulated risk."
+
+                key = ("deferred_security_work", github_ref, text[:80])
+                if key not in seen_keys:
+                    seen_keys.add(key)
                     correlations.append({
-                        "type": "slack_file_mention",
-                        "github_ref": f"PR #{github.number} - {file_path}",
-                        "slack_ref": f"#{msg.get('channel', '')} - {msg.get('ts', '')}",
+                        "type": "deferred_security_work",
+                        "confidence": confidence,
+                        "github_ref": github_ref,
+                        "slack_ref": slack_ref,
                         "slack_text": text[:200],
-                        "risk_note": f"File {file_name} was discussed in Slack: {text[:100]}",
+                        "risk_note": f"Security work explicitly deferred (keywords: {', '.join(deferred_hits[:3])})",
+                        "why_it_matters": why,
+                        "matched_keywords": deferred_hits,
                     })
 
-        # Check if PR title/content mentioned in security discussions
-        for msg in slack.messages:
-            text = msg.get("text", "").lower()
-            pr_keywords = github.title.lower().split() if github.title else []
-            matches = sum(1 for kw in pr_keywords if len(kw) > 3 and kw in text)
-            if matches >= 2:
-                correlations.append({
-                    "type": "slack_pr_discussion",
-                    "github_ref": f"PR #{github.number} - {github.title}",
-                    "slack_ref": f"#{msg.get('channel', '')}",
-                    "slack_text": msg.get("text", "")[:200],
-                    "risk_note": f"PR topic discussed in Slack security channel",
-                })
+            # --- Strategy: Unresolved known issues ---
+            unresolved_hits = [kw for kw in UNRESOLVED_ISSUE_KEYWORDS if kw in text_lower]
+            if unresolved_hits:
+                if matched_files:
+                    confidence, github_ref = "HIGH", ", ".join(matched_files)
+                    why = ("Known issue discussed but unresolved in files being changed. "
+                           "Team aware of the risk but it persists in the codebase.")
+                elif matched_modules:
+                    confidence = "MEDIUM"
+                    github_ref = f"PR #{github.number} modules: {', '.join(matched_modules[:3])}"
+                    why = ("Team acknowledged an issue in this module that has not been resolved. "
+                           "Turns a code finding from 'possible risk' into 'confirmed known risk'.")
+                else:
+                    confidence, github_ref = "LOW", f"PR #{github.number}"
+                    why = "Team references unresolved issue. General signal of accumulating security debt."
+
+                key = ("known_issue_unresolved", github_ref, text[:80])
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    correlations.append({
+                        "type": "known_issue_unresolved",
+                        "confidence": confidence,
+                        "github_ref": github_ref,
+                        "slack_ref": slack_ref,
+                        "slack_text": text[:200],
+                        "risk_note": f"Known issue discussed but unresolved (keywords: {', '.join(unresolved_hits[:3])})",
+                        "why_it_matters": why,
+                        "matched_keywords": unresolved_hits,
+                    })
+
+            # --- Strategy: Code review concerns ---
+            review_hits = [kw for kw in CODE_REVIEW_CONCERN_KEYWORDS if kw in text_lower]
+            if review_hits:
+                if matched_files:
+                    confidence, github_ref = "HIGH", ", ".join(matched_files)
+                    why = ("Team member raised security concern about files in this PR. "
+                           "Direct human expert judgment no automated scanner can replicate.")
+                elif matched_modules:
+                    confidence = "MEDIUM"
+                    github_ref = f"PR #{github.number} modules: {', '.join(matched_modules[:3])}"
+                    why = ("Security concern raised about code in this module. "
+                           "Human review flags catch logic-level issues pattern matching misses.")
+                else:
+                    confidence, github_ref = "LOW", f"PR #{github.number}"
+                    why = "Security concern raised in team discussion. Indicates heightened risk awareness."
+
+                key = ("code_review_concern", github_ref, text[:80])
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    correlations.append({
+                        "type": "code_review_concern",
+                        "confidence": confidence,
+                        "github_ref": github_ref,
+                        "slack_ref": slack_ref,
+                        "slack_text": text[:200],
+                        "risk_note": f"Security concern raised by team (keywords: {', '.join(review_hits[:3])})",
+                        "why_it_matters": why,
+                        "matched_keywords": review_hits,
+                    })
+
+            # --- Strategy: Crypto/hashing weakness ---
+            crypto_hits = [kw for kw in CRYPTO_WEAKNESS_KEYWORDS if kw in text_lower]
+            if crypto_hits:
+                if matched_files:
+                    confidence, github_ref = "HIGH", ", ".join(matched_files)
+                    why = ("Weak cryptography discussed for files in this PR. "
+                           "Team knows the crypto is weak but code still ships with it.")
+                elif matched_modules:
+                    confidence = "MEDIUM"
+                    github_ref = f"PR #{github.number} modules: {', '.join(matched_modules[:3])}"
+                    why = ("Cryptographic weakness discussed for this module. "
+                           "Gap between team knowledge and remediation action.")
+                else:
+                    confidence, github_ref = "LOW", f"PR #{github.number}"
+                    why = ("Weak cryptography mentioned in team discussion. "
+                           "Signals team awareness of crypto issues in the codebase.")
+
+                key = ("crypto_upgrade_needed", github_ref, text[:80])
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    correlations.append({
+                        "type": "crypto_upgrade_needed",
+                        "confidence": confidence,
+                        "github_ref": github_ref,
+                        "slack_ref": slack_ref,
+                        "slack_text": text[:200],
+                        "risk_note": f"Cryptographic weakness discussed (keywords: {', '.join(crypto_hits[:3])})",
+                        "why_it_matters": why,
+                        "matched_keywords": crypto_hits,
+                    })
+
+            # --- Strategy: File mentioned in security context without specific category ---
+            if matched_files and not (deferred_hits or unresolved_hits or review_hits or crypto_hits):
+                sec_hits = [kw for kw in SECURITY_KEYWORDS if kw.lower() in text_lower]
+                if sec_hits:
+                    key = ("slack_file_mention", ", ".join(matched_files), text[:80])
+                    if key not in seen_keys:
+                        seen_keys.add(key)
+                        correlations.append({
+                            "type": "slack_file_mention",
+                            "confidence": "MEDIUM",
+                            "github_ref": ", ".join(matched_files),
+                            "slack_ref": slack_ref,
+                            "slack_text": text[:200],
+                            "risk_note": "Files in this PR discussed in a security context",
+                            "why_it_matters": ("Team discussed these files in security-related conversation. "
+                                               "Human context that pure static analysis cannot provide."),
+                            "matched_keywords": sec_hits[:5],
+                        })
+
+        # --- Strategy: PR topic matching ---
+        pr_keywords = set()
+        if github.title:
+            pr_keywords.update(w.lower() for w in github.title.split() if len(w) > 3)
+        if github.body:
+            pr_keywords.update(w.lower() for w in github.body.split()[:50] if len(w) > 3)
+        stop_words = {"this", "that", "with", "from", "have", "been", "will", "would", "could", "should",
+                      "their", "there", "they", "them", "than", "then", "what", "when", "where", "which",
+                      "about", "into", "some", "more", "also", "just", "only", "other"}
+        pr_keywords -= stop_words
+
+        if pr_keywords:
+            for msg in slack.messages:
+                text = msg.get("text", "")
+                text_lower = text.lower()
+                matches = [kw for kw in pr_keywords if kw in text_lower]
+                if len(matches) >= 2:
+                    channel = msg.get("channel", "unknown")
+                    ts = msg.get("ts", "")
+                    key = ("slack_pr_discussion", f"PR #{github.number}", text[:80])
+                    if key not in seen_keys:
+                        seen_keys.add(key)
+                        correlations.append({
+                            "type": "slack_pr_discussion",
+                            "confidence": "MEDIUM",
+                            "github_ref": f"PR #{github.number} - {github.title}",
+                            "slack_ref": f"#{channel} - {ts}" if ts else f"#{channel}",
+                            "slack_text": text[:200],
+                            "risk_note": f"PR topic discussed in Slack (matched: {', '.join(matches[:4])})",
+                            "why_it_matters": ("PR subject discussed in team channels. May contain risk context, "
+                                               "design tradeoffs, or deferred work the PR itself omits."),
+                            "matched_keywords": matches[:5],
+                        })
+
+        # Sort: HIGH confidence first, then MEDIUM, then LOW
+        confidence_order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
+        correlations.sort(key=lambda c: confidence_order.get(c.get("confidence", "LOW"), 3))
 
         return correlations
+
+    async def discover_llm_correlations(self, github: PRData, slack: SlackContext, llm=None) -> list:
+        """Use the LLM to discover non-obvious correlations.
+
+        Catches connections keyword matching misses: implicit references,
+        paraphrased concerns, architectural implications, and risk patterns
+        that require reasoning to identify.
+        """
+        if llm is None:
+            return []
+
+        file_summaries = []
+        for f in github.changed_files[:8]:
+            fp = f.get("path", "")
+            patch = f.get("patch", "")[:300]
+            file_summaries.append(f"- {fp}: {patch}" if patch else f"- {fp}")
+        github_summary = (
+            f"PR #{github.number}: {github.title}\n"
+            f"Author: {github.author}\n"
+            f"Description: {github.body[:300]}\n"
+            f"Changed files:\n" + "\n".join(file_summaries)
+        )
+
+        slack_summary = "\n".join(
+            f"- [{m.get('channel', '?')}] {m.get('text', '')[:200]}"
+            for m in slack.messages[:15]
+        )
+
+        if not slack_summary.strip():
+            return []
+
+        prompt = (
+            "Analyze these code changes and team discussions for security-relevant connections "
+            "that keyword matching would miss.\n\n"
+            f"CODE CHANGES:\n{github_summary}\n\n"
+            f"TEAM DISCUSSIONS:\n{slack_summary}\n\n"
+            "Find connections where:\n"
+            "1. A message implicitly references code being changed (without naming the file)\n"
+            "2. A discussion reveals risk context relevant to the changed code\n"
+            "3. Multiple messages together paint a picture of accumulated risk\n"
+            "4. Architecture or design discussions relate to security of the changed code\n\n"
+            "Return a JSON array of objects with:\n"
+            '- "type": category (e.g., "implicit_risk_context", "accumulated_technical_debt", '
+            '"design_security_gap", "team_awareness_gap")\n'
+            '- "github_ref": which files/PR elements are involved\n'
+            '- "slack_ref": which message(s) are relevant\n'
+            '- "risk_note": what the connection reveals (1 sentence)\n'
+            '- "why_it_matters": why code-only analysis would miss this (1 sentence)\n\n'
+            "Return ONLY a JSON array. If no non-obvious connections, return [].\n"
+            "Do NOT repeat connections that simple keyword/filename matching would find."
+        )
+
+        try:
+            result = llm.chat(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are a cross-source security analyst. Find connections between code changes and team discussions that automated pattern matching would miss. Output ONLY valid JSON arrays."},
+                    {"role": "user", "content": prompt},
+                ],
+                metadata={"agent": "deepsentinel", "task": "llm_correlation"},
+                temperature=0.2,
+            )
+
+            import re as _re
+            content = result.get("content", "").strip()
+            if content.startswith("```"):
+                content = content.split("\n", 1)[1] if "\n" in content else content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+            content = content.strip()
+
+            parsed = None
+            try:
+                parsed = json.loads(content)
+            except json.JSONDecodeError:
+                match = _re.search(r"\[.*\]", content, _re.DOTALL)
+                if match:
+                    try:
+                        parsed = json.loads(match.group())
+                    except json.JSONDecodeError:
+                        pass
+
+            if not isinstance(parsed, list):
+                return []
+
+            llm_correlations = []
+            for item in parsed:
+                if not isinstance(item, dict):
+                    continue
+                llm_correlations.append({
+                    "type": item.get("type", "llm_discovered"),
+                    "confidence": "LOW",
+                    "github_ref": item.get("github_ref", f"PR #{github.number}"),
+                    "slack_ref": item.get("slack_ref", ""),
+                    "slack_text": item.get("slack_ref", "")[:200],
+                    "risk_note": item.get("risk_note", ""),
+                    "why_it_matters": item.get("why_it_matters", "Discovered by LLM cross-source analysis"),
+                    "matched_keywords": [],
+                    "source": "llm_discovery",
+                })
+
+            return llm_correlations
+
+        except Exception as e:
+            print(f"[Airbyte] LLM correlation discovery error: {e}")
+            return []
 
     # ===========================
     # MULTI-SOURCE ENRICHMENT METRICS

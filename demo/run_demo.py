@@ -79,45 +79,45 @@ async def demo():
     print(f"  {len(patterns)} vulnerability patterns loaded")
     print()
 
+    # Step 3.5: Pull cross-source context from GitHub Issues + PR comments
+    print("[3.5/6] CROSS-SOURCE — Pulling GitHub Issues + PR review comments...")
+    security_issues = await data.get_security_issues(owner, repo)
+    pr_comments = await data.get_pr_comments(owner, repo, pr_number)
+    print(f"  {len(security_issues)} security issues, {len(pr_comments)} PR review comments")
+
+    # Build context strings from real GitHub data
+    cross_source_context = []
+    for issue in security_issues:
+        cross_source_context.append(
+            f"Issue #{issue['number']} ({issue.get('created_at', '')[:10]}): '{issue['title']}'"
+        )
+    for comment in pr_comments:
+        cross_source_context.append(
+            f"PR #{pr_number} review ({comment.get('created_at', '')[:10]}): "
+            f"'{comment.get('body', '')[:120]}'"
+        )
+
+    # Build correlations from real data
+    from src.data.airbyte_client import GitHubIssueContext
+    issue_ctx = GitHubIssueContext(issues=security_issues, pr_comments=pr_comments)
+    real_correlations = data.correlate_issues_with_code(
+        context.github.changed_files, issue_ctx, pr_number
+    )
+    print(f"  {len(real_correlations)} cross-source correlations discovered")
+
     # Step 4: Multi-model analysis
     print("[4/6] ANALYZE — Running security analysis via TrueFoundry AI Gateway...")
     print("  (All LLM calls instrumented by Overmind for optimization)")
 
-    # Simulate Slack cross-source data for demo
-    demo_slack_context = [
-        "John (Mar 14): 'Let's skip input validation for the payment endpoint — we'll add it in Q2'",
-        "Sarah (Mar 15): 'The DB password for payments is still hardcoded, can someone move it to secrets manager?'",
-        "Mike (Mar 20): 'Has anyone reviewed the refund endpoint? It's using os.system directly'",
-    ]
-
     analysis_context = {
         "files": context.github.changed_files,
         "architecture": {f.get("path", ""): macroscope._static_context(f.get("path", "")) for f in context.github.changed_files},
-        "slack_context": demo_slack_context,
+        "slack_context": cross_source_context,
         "historical_patterns": [
             {"cwe": "CWE-89", "count": 3, "last_seen": "2026-02-15"},
             {"cwe": "CWE-798", "count": 2, "last_seen": "2026-01-20"},
         ],
-        "correlations": [
-            {
-                "type": "deferred_security_work",
-                "github_ref": "PR #1 - payment.py",
-                "slack_ref": "#engineering - Mar 14",
-                "risk_note": "Input validation explicitly deferred per Slack discussion",
-            },
-            {
-                "type": "known_issue_unresolved",
-                "github_ref": "PR #1 - payment.py:10",
-                "slack_ref": "#engineering - Mar 15",
-                "risk_note": "Hardcoded DB password flagged in Slack but not yet moved to secrets manager",
-            },
-            {
-                "type": "code_review_concern",
-                "github_ref": "PR #1 - payment.py:30",
-                "slack_ref": "#engineering - Mar 20",
-                "risk_note": "os.system usage in refund endpoint flagged by team member",
-            },
-        ],
+        "correlations": real_correlations,
     }
 
     findings = analyzer = SecurityAnalyzer(llm, cache)
@@ -181,13 +181,18 @@ async def demo():
     print(report)
     print()
     print("=" * 70)
-    print("  WHAT SNYK/CODEQL MISSED:")
+    print("  WHAT SNYK/CODEQL MISSED (from REAL GitHub Issues + PR comments):")
     print()
     for corr in analysis_context["correlations"]:
         print(f"  > {corr['risk_note']}")
-        print(f"    Source: {corr['slack_ref']} <-> {corr['github_ref']}")
+        context_ref = corr.get('context_ref', corr.get('slack_ref', ''))
+        print(f"    Source: {context_ref} <-> {corr['github_ref']}")
+        why = corr.get('why_code_only_misses', '')
+        if why:
+            print(f"    WHY SCANNERS MISS: {why}")
         print()
     print("  DeepSentinel found these because it scans CONTEXT, not just code.")
+    print("  All correlations above come from REAL GitHub data (Issues #2, #3 + PR #1 comments).")
     print("=" * 70)
 
 
