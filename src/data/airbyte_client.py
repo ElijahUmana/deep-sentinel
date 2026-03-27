@@ -1050,16 +1050,16 @@ class AirbyteDataLayer:
     def print_enrichment_summary(self, metrics: dict):
         """Print a summary showing the multi-source value proposition."""
         code = metrics.get("code_only_findings", 0)
-        slack = metrics.get("slack_context_findings", 0)
+        context_signals = metrics.get("slack_context_findings", 0)
         linked = metrics.get("cross_source_linked", 0)
         total = metrics.get("total_signals", 0)
 
         print(f"\n  [Multi-Source Value]")
-        print(f"    Code alone:          {code} signals")
-        print(f"    + Slack context:     {slack} additional signals")
+        print(f"    Code alone:           {code} signals")
+        print(f"    + Issues/Comments:    {context_signals} additional signals")
         print(f"    + Cross-source links: {linked} correlated risks")
         print(f"    ----------------------------------------")
-        print(f"    Total intelligence:  {total} signals ({metrics.get('sources_used', 0)} sources)")
+        print(f"    Total intelligence:   {total} signals ({metrics.get('sources_used', 0)} sources)")
         if code > 0:
             uplift = ((total - code) / code * 100) if code else 0
-            print(f"    Context uplift:      +{uplift:.0f}% over code-only scanning")
+            print(f"    Context uplift:       +{uplift:.0f}% over code-only scanning")

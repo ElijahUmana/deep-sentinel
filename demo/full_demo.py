@@ -172,15 +172,71 @@ async def demo():
             slack_context.append(m.get("text", ""))
         print(f"  [Airbyte/Slack] LIVE: +{len(slack_data.messages)} Slack messages from {len(slack_data.channels_searched)} channels")
 
-    # Build cross-source correlations using the structured correlation engine
-    cross_source_correlations = data.correlate_issues_with_code(all_files, issue_ctx, 1)
-    print(f"  [Correlation Engine] {len(cross_source_correlations)} cross-source links discovered")
-    for corr in cross_source_correlations:
-        print(f"    [{corr['type']}] {corr['risk_note'][:80]}")
+    # === CROSS-SOURCE CORRELATION ENGINE ===
+    # This is the core differentiator. We combine multiple correlation strategies:
+    # 1. GitHub Issues + PR comments correlated with changed code (structured)
+    # 2. Slack messages correlated with changed code (keyword discovery)
+    # 3. LLM-discovered non-obvious correlations
+
+    # Strategy 1: GitHub Issues + PR comments
+    issue_correlations = data.correlate_issues_with_code(all_files, issue_ctx, 1)
+    print(f"  [Correlation Engine] Strategy 1 (Issues+Comments): {len(issue_correlations)} correlations")
+
+    # Strategy 2: Slack message keyword correlation (auto-discovery)
+    # Build a PRData for the correlation engine from what we already have
+    from src.data.airbyte_client import PRData, SlackContext as SlackCtx
+    pr_for_corr = PRData(
+        number=pr.number, title=pr.title, author=pr.author, body=pr.body,
+        changed_files=all_files, commits=[], labels=pr.labels,
+    )
+
+    # If Slack connector returned nothing, build representative messages for demo
+    if not slack_data.messages:
+        slack_data = SlackCtx(messages=[
+            {"channel": "engineering", "text": "Let's skip input validation for the payment endpoint -- we'll add it in Q2", "user": "john", "ts": ""},
+            {"channel": "engineering", "text": "The DB password for payments is still hardcoded, can someone move it to secrets manager?", "user": "sarah", "ts": ""},
+            {"channel": "security-review", "text": "Has anyone reviewed the refund endpoint? It's using os.system directly", "user": "mike", "ts": ""},
+            {"channel": "engineering", "text": "The auth module uses MD5 -- we need to upgrade to bcrypt before launch", "user": "lisa", "ts": ""},
+        ], channels_searched=["engineering", "security-review"])
+        print(f"  [Airbyte/Slack] {len(slack_data.messages)} security messages (representative -- set SLACK_BOT_TOKEN for live)")
+
+    slack_correlations = data._correlate(pr_for_corr, slack_data)
+    print(f"  [Correlation Engine] Strategy 2 (Slack keywords): {len(slack_correlations)} correlations")
+    for corr in slack_correlations:
+        conf = corr.get("confidence", "?")
+        print(f"    [{conf}] [{corr['type']}] {corr.get('risk_note', '')[:70]}")
+
+    # Strategy 3: LLM-discovered non-obvious correlations
+    llm_correlations = await data.discover_llm_correlations(pr_for_corr, slack_data, llm=llm)
+    print(f"  [Correlation Engine] Strategy 3 (LLM discovery): {len(llm_correlations)} correlations")
+    for corr in llm_correlations:
+        print(f"    [LLM] {corr.get('risk_note', '')[:70]}")
+
+    # Merge all correlation sources, normalizing the schema
+    cross_source_correlations = []
+    for corr in issue_correlations:
+        # Normalize issue correlations to include confidence + why_it_matters
+        corr.setdefault("confidence", "HIGH")  # Issues are direct evidence
+        corr.setdefault("why_it_matters", corr.get("why_code_only_misses", ""))
+        corr.setdefault("slack_ref", corr.get("context_ref", ""))
+        corr.setdefault("slack_text", corr.get("context_text", ""))
+        cross_source_correlations.append(corr)
+    cross_source_correlations.extend(slack_correlations)
+    cross_source_correlations.extend(llm_correlations)
+
+    # Sort by confidence: HIGH first
+    conf_order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
+    cross_source_correlations.sort(key=lambda c: conf_order.get(c.get("confidence", "LOW"), 3))
+
+    print(f"\n  [Correlation Engine] TOTAL: {len(cross_source_correlations)} cross-source links")
+    high_count = sum(1 for c in cross_source_correlations if c.get("confidence") == "HIGH")
+    med_count = sum(1 for c in cross_source_correlations if c.get("confidence") == "MEDIUM")
+    low_count = sum(1 for c in cross_source_correlations if c.get("confidence") == "LOW")
+    print(f"    HIGH confidence: {high_count} | MEDIUM: {med_count} | LOW: {low_count}")
 
     # Show Airbyte multi-source enrichment metrics
-    code_signals = len(all_files) * 3  # approximate code-only signal count
-    context_signals = len(security_issues) + len(pr_comments)
+    code_signals = len(all_files) * 3
+    context_signals = len(security_issues) + len(pr_comments) + len(slack_data.messages)
     cross_signals = len(cross_source_correlations)
     sources_used = 1 + (1 if security_issues else 0) + (1 if pr_comments else 0) + (1 if slack_data.messages else 0)
     enrichment_metrics = {
@@ -462,15 +518,18 @@ async def demo():
 
     header("WHAT EXISTING TOOLS MISS")
     print("  Snyk, CodeQL, and GitHub Advanced Security scan CODE.")
-    print("  DeepSentinel scans CONTEXT -- correlating Issues, PR reviews, and architecture.")
+    print("  DeepSentinel scans CONTEXT -- correlating GitHub Issues, Slack, PR reviews,")
+    print("  and architecture to find risks that live BETWEEN tools.")
     print()
     for corr in cross_source_correlations:
-        print(f"  > {corr['risk_note']}")
-        context_ref = corr.get('context_ref', corr.get('slack_ref', ''))
-        why_missed = corr.get('why_code_only_misses', '')
+        conf = corr.get("confidence", "?")
+        ctype = corr.get("type", "unknown")
+        print(f"  [{conf}] {corr.get('risk_note', '')}")
+        context_ref = corr.get("context_ref", corr.get("slack_ref", ""))
         print(f"    {context_ref} <-> {corr['github_ref']}")
-        if why_missed:
-            print(f"    WHY SCANNERS MISS THIS: {why_missed}")
+        why = corr.get("why_it_matters", corr.get("why_code_only_misses", ""))
+        if why:
+            print(f"    WHY SCANNERS MISS THIS: {why}")
         print()
 
     header("INTEGRATION SUMMARY")
