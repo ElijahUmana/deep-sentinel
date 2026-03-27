@@ -4,9 +4,12 @@ Multi-source data ingestion: GitHub + Slack via agent connectors.
 Cross-source correlation engine.
 """
 import asyncio
+import base64
 import json
 import os
 from dataclasses import dataclass, field
+
+import httpx
 
 from airbyte_agent_github import GithubConnector
 from airbyte_agent_github.models import GithubPersonalAccessTokenAuthConfig
@@ -58,10 +61,14 @@ class AirbyteDataLayer:
         self.slack = None
 
         if self.github_token:
-            self.github = GithubConnector(
-                auth_config=GithubPersonalAccessTokenAuthConfig(token=self.github_token)
-            )
-            print("[Airbyte] GitHub connector initialized")
+            try:
+                self.github = GithubConnector(
+                    auth_config=GithubPersonalAccessTokenAuthConfig(token=self.github_token)
+                )
+                print("[Airbyte] GitHub connector initialized")
+            except Exception as e:
+                print(f"[Airbyte] GitHub connector init error: {e}")
+                self.github = None
 
         if self.slack_token:
             self.slack = SlackConnector(
@@ -84,41 +91,37 @@ class AirbyteDataLayer:
 
     async def get_pr_details(self, owner: str, repo: str, pr_number: int) -> PRData:
         """Get full PR details including changed files."""
-        if not self.github:
-            return PRData(number=pr_number, title="", author="", body="")
-
-        # Get PR info
-        try:
-            pr = await self.github.execute("pull_requests", "get", {"owner": owner, "repo": repo, "number": pr_number})
-        except Exception as e:
-            print(f"[Airbyte] Error getting PR: {e}")
+        pr = await self._github_api_pr(owner, repo, pr_number)
+        if not pr:
             return PRData(number=pr_number, title=f"PR #{pr_number}", author="unknown", body="")
 
-        # Get recent commits
-        try:
-            commits_result = await self.github.execute("commits", "list", {"owner": owner, "repo": repo, "per_page": 10})
-            commits = commits_result.data if hasattr(commits_result, "data") else []
-        except Exception:
-            commits = []
+        # Get the PR's head branch for fetching file content
+        head_ref = pr.get("head", {}).get("ref", "main") if isinstance(pr.get("head"), dict) else "main"
 
-        # Get changed file contents
+        pr_files = await self._github_api_pr_files(owner, repo, pr_number)
         changed_files = []
-        file_paths = pr.get("changed_files_paths", []) if isinstance(pr, dict) else []
-        for fp in file_paths[:10]:
-            try:
-                content = await self.github.execute("file_content", "get", {"owner": owner, "repo": repo, "path": fp})
-                changed_files.append({"path": fp, "content": content.get("content", "") if isinstance(content, dict) else ""})
-            except Exception:
-                changed_files.append({"path": fp, "content": ""})
+        for pf in pr_files[:10]:
+            fp = pf.get("filename", "")
+            content = await self._github_api_file(owner, repo, fp, ref=head_ref)
+            changed_files.append({"path": fp, "content": content, "patch": pf.get("patch", "")})
+
+        user = pr.get("user", {})
+        labels = pr.get("labels", [])
+        label_names = []
+        for l in labels:
+            if isinstance(l, dict):
+                label_names.append(l.get("name", ""))
+            elif isinstance(l, str):
+                label_names.append(l)
 
         return PRData(
-            number=pr.get("number", pr_number) if isinstance(pr, dict) else pr_number,
-            title=pr.get("title", "") if isinstance(pr, dict) else "",
-            author=pr.get("user", {}).get("login", "unknown") if isinstance(pr, dict) else "unknown",
-            body=pr.get("body", "") if isinstance(pr, dict) else "",
+            number=pr.get("number", pr_number),
+            title=pr.get("title", ""),
+            author=user.get("login", "unknown") if isinstance(user, dict) else str(user),
+            body=pr.get("body", "") or "",
             changed_files=changed_files,
-            commits=commits,
-            labels=[l.get("name", "") for l in (pr.get("labels", []) if isinstance(pr, dict) else [])],
+            commits=[],
+            labels=label_names,
         )
 
     async def get_repo_files(self, owner: str, repo: str, path: str = "") -> list:
@@ -132,14 +135,55 @@ class AirbyteDataLayer:
             return []
 
     async def get_file_content(self, owner: str, repo: str, path: str) -> str:
-        """Get raw file content."""
-        if not self.github:
-            return ""
+        """Get raw file content from GitHub."""
+        return await self._github_api_file(owner, repo, path)
+
+    async def _github_api_file(self, owner: str, repo: str, path: str, ref: str = None) -> str:
+        """Fetch file content from GitHub API."""
         try:
-            result = await self.github.execute("file_content", "get", {"owner": owner, "repo": repo, "path": path})
-            return result.get("content", "") if isinstance(result, dict) else ""
+            async with httpx.AsyncClient() as client:
+                params = {}
+                if ref:
+                    params["ref"] = ref
+                resp = await client.get(
+                    f"https://api.github.com/repos/{owner}/{repo}/contents/{path}",
+                    headers={"Authorization": f"Bearer {self.github_token}", "Accept": "application/vnd.github.v3+json"},
+                    params=params,
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return base64.b64decode(data.get("content", "")).decode("utf-8", errors="replace")
         except Exception:
-            return ""
+            pass
+        return ""
+
+    async def _github_api_pr(self, owner: str, repo: str, pr_number: int) -> dict:
+        """Direct GitHub API fallback for PR data."""
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(
+                    f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}",
+                    headers={"Authorization": f"Bearer {self.github_token}", "Accept": "application/vnd.github.v3+json"},
+                )
+                if resp.status_code == 200:
+                    return resp.json()
+        except Exception:
+            pass
+        return {}
+
+    async def _github_api_pr_files(self, owner: str, repo: str, pr_number: int) -> list:
+        """Get changed files in a PR via GitHub API."""
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(
+                    f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/files",
+                    headers={"Authorization": f"Bearer {self.github_token}", "Accept": "application/vnd.github.v3+json"},
+                )
+                if resp.status_code == 200:
+                    return resp.json()
+        except Exception:
+            pass
+        return []
 
     # ===========================
     # SLACK DATA

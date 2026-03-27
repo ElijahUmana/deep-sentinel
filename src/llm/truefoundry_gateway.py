@@ -2,56 +2,90 @@
 TrueFoundry AI Gateway integration for DeepSentinel.
 Routes all LLM calls through TrueFoundry for multi-model routing,
 observability, rate limiting, and cost tracking.
+When TrueFoundry is not configured, uses Anthropic Claude directly.
 """
 import json
 import os
-from openai import OpenAI
+
+import anthropic
 
 
 class TrueFoundryGateway:
     def __init__(self, api_key: str = None, base_url: str = None):
-        self.api_key = api_key or os.environ.get("TRUEFOUNDRY_API_KEY", "")
-        self.base_url = base_url or os.environ.get("TRUEFOUNDRY_BASE_URL", "https://gateway.truefoundry.ai")
+        self.tfy_key = api_key or os.environ.get("TRUEFOUNDRY_API_KEY", "")
+        self.tfy_base = base_url or os.environ.get("TRUEFOUNDRY_BASE_URL", "https://gateway.truefoundry.ai")
+        self.anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
 
-        # If TrueFoundry key available, route through gateway
-        # Otherwise fall back to direct OpenAI
-        if self.api_key:
-            self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
-            self.model_prefix = "openai-main/"
-            self.anthropic_prefix = "anthropic-main/"
+        if self.tfy_key:
+            # Route through TrueFoundry gateway
+            from openai import OpenAI
+            self.openai_client = OpenAI(api_key=self.tfy_key, base_url=self.tfy_base)
+            self.mode = "truefoundry"
+            print("[TrueFoundry] AI Gateway connected — multi-model routing active")
+        elif self.anthropic_key:
+            self.anthropic_client = anthropic.Anthropic(api_key=self.anthropic_key)
+            self.mode = "anthropic"
+            print("[TrueFoundry] Using Anthropic Claude directly (gateway key pending)")
         else:
-            self.client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
-            self.model_prefix = ""
-            self.anthropic_prefix = ""
-
-    def _model(self, model: str) -> str:
-        """Resolve model name for TrueFoundry gateway format."""
-        if self.model_prefix and not model.startswith(("openai", "anthropic")):
-            if "claude" in model:
-                return f"{self.anthropic_prefix}{model}"
-            return f"{self.model_prefix}{model}"
-        return model
+            self.mode = "none"
+            print("[TrueFoundry] No LLM keys configured")
 
     def chat(self, model: str, messages: list, metadata: dict = None, **kwargs) -> dict:
-        """Send a chat completion through TrueFoundry gateway."""
+        """Send a chat completion. Routes through TrueFoundry or Anthropic."""
+        if self.mode == "truefoundry":
+            return self._chat_truefoundry(model, messages, metadata, **kwargs)
+        elif self.mode == "anthropic":
+            return self._chat_anthropic(messages, **kwargs)
+        else:
+            return {"content": "[No LLM configured]", "model": "none", "usage": {}}
+
+    def _chat_truefoundry(self, model: str, messages: list, metadata: dict = None, **kwargs) -> dict:
+        """Route through TrueFoundry AI Gateway."""
         extra_headers = {}
         if metadata:
-            meta = {"tfy_log_request": "true", **metadata}
-            extra_headers["X-TFY-METADATA"] = json.dumps(meta)
+            extra_headers["X-TFY-METADATA"] = json.dumps({"tfy_log_request": "true", **metadata})
 
-        response = self.client.chat.completions.create(
-            model=self._model(model),
-            messages=messages,
-            extra_headers=extra_headers if extra_headers else None,
-            **kwargs,
+        tfy_model = model
+        if not model.startswith(("openai", "anthropic")):
+            tfy_model = f"openai-main/{model}" if "claude" not in model else f"anthropic-main/{model}"
+
+        response = self.openai_client.chat.completions.create(
+            model=tfy_model, messages=messages,
+            extra_headers=extra_headers if extra_headers else None, **kwargs,
         )
         return {
             "content": response.choices[0].message.content,
             "model": response.model,
-            "usage": {
-                "prompt_tokens": response.usage.prompt_tokens if response.usage else 0,
-                "completion_tokens": response.usage.completion_tokens if response.usage else 0,
-            },
+            "usage": {"prompt_tokens": response.usage.prompt_tokens, "completion_tokens": response.usage.completion_tokens},
+        }
+
+    def _chat_anthropic(self, messages: list, **kwargs) -> dict:
+        """Use Anthropic Claude directly."""
+        # Separate system message from user messages
+        system_msg = ""
+        user_messages = []
+        for m in messages:
+            if m["role"] == "system":
+                system_msg = m["content"]
+            else:
+                user_messages.append(m)
+
+        if not user_messages:
+            user_messages = [{"role": "user", "content": "Analyze."}]
+
+        temp = kwargs.get("temperature", 0.3)
+        response = self.anthropic_client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=4096,
+            system=system_msg,
+            messages=user_messages,
+            temperature=temp,
+        )
+        content = response.content[0].text if response.content else ""
+        return {
+            "content": content,
+            "model": response.model,
+            "usage": {"prompt_tokens": response.usage.input_tokens, "completion_tokens": response.usage.output_tokens},
         }
 
     def fast_scan(self, code: str, file_path: str) -> dict:
