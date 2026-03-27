@@ -143,13 +143,27 @@ CREATE TABLE IF NOT EXISTS audit_log (
         if not self.connected:
             return
 
-        async with self.pool.acquire() as conn:
-            await conn.execute(
-                "INSERT INTO correlations (scan_id, correlation_type, github_ref, slack_ref, description, risk_score) VALUES ($1,$2,$3,$4,$5,$6)",
-                scan_id, correlation.get("type", ""), correlation.get("github_ref", ""),
-                correlation.get("slack_ref", ""), correlation.get("risk_note", ""),
-                correlation.get("risk_score"),
-            )
+        # Ensure all values are strings (some correlations have list fields)
+        def to_str(val):
+            if val is None:
+                return ""
+            if isinstance(val, (list, dict)):
+                return json.dumps(val)
+            return str(val)
+
+        try:
+            async with self.pool.acquire() as conn:
+                await conn.execute(
+                    "INSERT INTO correlations (scan_id, correlation_type, github_ref, slack_ref, description, risk_score) VALUES ($1,$2,$3,$4,$5,$6)",
+                    scan_id,
+                    to_str(correlation.get("type", "")),
+                    to_str(correlation.get("github_ref", correlation.get("context_ref", ""))),
+                    to_str(correlation.get("slack_ref", "")),
+                    to_str(correlation.get("risk_note", "")),
+                    correlation.get("risk_score") if isinstance(correlation.get("risk_score"), (int, float)) else None,
+                )
+        except Exception as e:
+            pass  # Don't crash on correlation storage errors
 
     async def log_audit(self, action: str, resource_type: str = None,
                         resource_id: str = None, details: dict = None):
