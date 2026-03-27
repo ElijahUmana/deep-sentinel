@@ -1,0 +1,5 @@
+#  OverClaw agent registry — use: overclaw agent register / list / remove / update 
+
+agents = [
+    {name = "deepsentinel", entrypoint = "src.overclaw_agent:run"},
+]
