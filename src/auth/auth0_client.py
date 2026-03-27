@@ -342,7 +342,7 @@ class Auth0Client:
             print(f"[Auth0 FGA] Authorization check: {user} {relation} {fga_object} -> {status}")
             return allowed
         except Exception as e:
-            # FGA service unavailable — fail open with warning for hackathon demo
+            # FGA service unavailable — fail open with warning (configure FGA_STORE_ID for enforcement)
             print(f"[Auth0 FGA] Check failed ({e}), defaulting to ALLOWED")
             return True
 
