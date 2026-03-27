@@ -204,6 +204,122 @@ CREATE TABLE IF NOT EXISTS audit_log (
             critical = await conn.fetchval("SELECT COUNT(*) FROM vulnerabilities WHERE severity='CRITICAL'")
             return {"total_scans": scans, "total_findings": findings, "critical_findings": critical}
 
+    async def get_trend_analysis(self, repo_owner: str, repo_name: str) -> dict:
+        """Analyze vulnerability trends across scans to detect worsening patterns.
+
+        This is Ghost's unique value for agentic security: the agent maintains
+        persistent memory across scans. It can detect:
+        - Recurring CWEs that the team keeps introducing
+        - Severity trends (is the codebase getting more or less secure?)
+        - Time-to-fix for known vulnerabilities
+        """
+        if not self.connected:
+            return {"trends": [], "note": "Ghost not connected -- no historical data"}
+
+        async with self.pool.acquire() as conn:
+            # CWE recurrence: which vulnerabilities keep coming back?
+            recurring = await conn.fetch(
+                """SELECT cwe_id, COUNT(DISTINCT scan_id) as scan_appearances,
+                          COUNT(*) as total_occurrences,
+                          ARRAY_AGG(DISTINCT UPPER(severity)) as severities,
+                          MIN(created_at) as first_seen,
+                          MAX(created_at) as last_seen
+                   FROM vulnerabilities
+                   WHERE repo_owner = $1 AND repo_name = $2
+                   GROUP BY cwe_id
+                   HAVING COUNT(DISTINCT scan_id) > 1
+                   ORDER BY scan_appearances DESC LIMIT 10""",
+                repo_owner, repo_name,
+            )
+
+            # Severity trend per scan
+            severity_trend = await conn.fetch(
+                """SELECT s.id as scan_id, s.started_at::date as scan_date,
+                          s.findings_count, s.critical_count, s.high_count
+                   FROM scans s
+                   WHERE s.repo_owner = $1 AND s.repo_name = $2
+                   AND s.status = 'completed'
+                   ORDER BY s.started_at DESC LIMIT 10""",
+                repo_owner, repo_name,
+            )
+
+            # Open vs fixed ratio
+            open_count = await conn.fetchval(
+                "SELECT COUNT(*) FROM vulnerabilities WHERE repo_owner=$1 AND repo_name=$2 AND status='open'",
+                repo_owner, repo_name,
+            )
+            total_count = await conn.fetchval(
+                "SELECT COUNT(*) FROM vulnerabilities WHERE repo_owner=$1 AND repo_name=$2",
+                repo_owner, repo_name,
+            )
+
+            return {
+                "recurring_cwes": [dict(r) for r in recurring],
+                "severity_trend": [dict(r) for r in severity_trend],
+                "open_vulnerabilities": open_count,
+                "total_vulnerabilities": total_count,
+                "fix_rate": round((1 - open_count / total_count) * 100, 1) if total_count > 0 else 0,
+                "note": "Trend analysis from Ghost persistent history",
+            }
+
+    async def compute_risk_score(self, repo_owner: str, repo_name: str,
+                                  cross_source_correlations: int = 0) -> dict:
+        """Compute a composite risk score that factors in historical patterns.
+
+        This goes beyond single-scan scoring: it considers how many times
+        the team has been warned about the same CWEs, whether fixes are
+        happening, and how much cross-source context indicates unaddressed risk.
+        """
+        if not self.connected:
+            return {"risk_score": 0, "note": "Ghost not connected"}
+
+        async with self.pool.acquire() as conn:
+            # Base score from current findings
+            current = await conn.fetch(
+                """SELECT UPPER(severity) as severity, COUNT(*) as cnt
+                   FROM vulnerabilities
+                   WHERE repo_owner=$1 AND repo_name=$2 AND status='open'
+                   GROUP BY UPPER(severity)""",
+                repo_owner, repo_name,
+            )
+            severity_weights = {"CRITICAL": 10, "HIGH": 5, "MEDIUM": 2, "LOW": 1}
+            base_score = sum(
+                severity_weights.get(r["severity"], 0) * r["cnt"]
+                for r in current
+            )
+
+            # Recurrence multiplier: repeated CWEs are worse
+            repeat_count = await conn.fetchval(
+                """SELECT COUNT(*) FROM (
+                       SELECT cwe_id FROM vulnerabilities
+                       WHERE repo_owner=$1 AND repo_name=$2
+                       GROUP BY cwe_id HAVING COUNT(DISTINCT scan_id) > 1
+                   ) repeats""",
+                repo_owner, repo_name,
+            )
+            recurrence_factor = 1.0 + (repeat_count * 0.15)
+
+            # Cross-source factor: correlations with team discussions = confirmed risk
+            cross_source_factor = 1.0 + (cross_source_correlations * 0.1)
+
+            composite = round(base_score * recurrence_factor * cross_source_factor, 1)
+            max_score = 100
+            normalized = min(composite, max_score)
+
+            return {
+                "risk_score": normalized,
+                "base_score": base_score,
+                "recurrence_multiplier": round(recurrence_factor, 2),
+                "cross_source_multiplier": round(cross_source_factor, 2),
+                "repeated_cwes": repeat_count,
+                "interpretation": (
+                    "CRITICAL" if normalized >= 50 else
+                    "HIGH" if normalized >= 25 else
+                    "MEDIUM" if normalized >= 10 else
+                    "LOW"
+                ),
+            }
+
     async def close(self):
         """Close database connection."""
         if self.pool:

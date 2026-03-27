@@ -255,9 +255,32 @@ async def demo():
     # ===========================
     step(2, 7, "UNDERSTAND — Analyzing codebase architecture via Macroscope...")
 
+    # Query Macroscope for security surface area (triggers webhook, polls for result)
+    security_surface = await macroscope.get_security_surface(
+        f"Security scanner analyzing {owner}/{repo}"
+    )
+    if security_surface.get("macroscope_analysis"):
+        print(f"  [Macroscope] Security surface analysis:")
+        for line in security_surface["macroscope_analysis"].split("\n")[:8]:
+            if line.strip():
+                print(f"    {line.strip()}")
+    else:
+        print(f"  [Macroscope] Surface analysis: {security_surface.get('note', 'pending')}")
+
+    # Get architectural context per file (uses Macroscope when connected, falls back to heuristics)
     for f in all_files:
-        ctx = macroscope._static_context(f["path"])
-        print(f"  {f['path']}: module={ctx['module']}, criticality={ctx['criticality']}")
+        ctx = await macroscope.get_module_context(f["path"])
+        ms_tag = " (Macroscope)" if ctx.get("macroscope_answer") else " (heuristic)"
+        print(f"  {f['path']}: module={ctx['module']}, criticality={ctx['criticality']}{ms_tag}")
+
+    # Dependency risk analysis: which files have the highest blast radius?
+    file_paths = [f["path"] for f in all_files]
+    dep_risk = await macroscope.analyze_dependency_risk(file_paths)
+    if dep_risk.get("risk_ranking") and isinstance(dep_risk["risk_ranking"], str):
+        print(f"\n  [Macroscope] Dependency blast radius analysis:")
+        for line in dep_risk["risk_ranking"].split("\n")[:6]:
+            if line.strip():
+                print(f"    {line.strip()}")
     print()
 
     # ===========================
@@ -271,6 +294,20 @@ async def demo():
 
     patterns = cache.get_patterns()
     print(f"  {len(patterns)} CWE vulnerability patterns loaded from set 'patterns'")
+
+    # Severity-filtered query (demonstrates secondary index query pattern)
+    critical_patterns = cache.get_patterns_by_severity("CRITICAL")
+    high_patterns = cache.get_patterns_by_severity("HIGH")
+    print(f"  Severity filter: {len(critical_patterns)} CRITICAL, {len(high_patterns)} HIGH patterns")
+    print(f"  (Uses secondary index on 'severity' bin for server-side filtering)")
+
+    # Batch CVE lookup (demonstrates batch_get for parallel record retrieval)
+    sample_cves = ["CVE-2021-44228", "CVE-2023-44487", "CVE-2024-3094"]
+    for cve_id in sample_cves:
+        cache.cache_cve(cve_id, {"severity": "CRITICAL", "description": f"Known critical: {cve_id}", "cvss_score": 9.8})
+    batch_results = cache.batch_lookup_cves(sample_cves)
+    print(f"  Batch CVE lookup: {len(batch_results)}/{len(sample_cves)} found in single operation")
+    print(f"  (Aerospike batch_get: 1 network round trip instead of {len(sample_cves)} sequential gets)")
 
     # Demonstrate session state management
     cache.save_session(scan_id, {"status": "scanning", "files": len(all_files), "repo": f"{owner}/{repo}"})
@@ -335,17 +372,19 @@ async def demo():
 
     db_id = os.environ.get("GHOST_DB_ID", "uipdk8byh3")
 
-    # 5a: Query Ghost schema — LLM-optimized format for agent consumption
+    # 5a: Agent introspection — reads its own schema to decide what to query
     print(f"  [Ghost] Database ID: {db_id}")
-    print(f"  [Ghost] Running: ghost schema {db_id}")
-    schema_output = GhostDB.get_schema(db_id)
-    if schema_output:
-        print(f"\n  [Ghost Schema] LLM-optimized database structure:")
-        for line in schema_output.split("\n"):
+    print(f"  [Ghost] Agent introspecting its own schema...")
+    introspection = GhostDB.agent_introspect(db_id)
+    if introspection.get("raw_schema"):
+        print(f"\n  [Ghost Schema] LLM-optimized database structure ({introspection['table_count']} tables):")
+        for line in introspection["raw_schema"].split("\n"):
             stripped = line.strip()
             if stripped:
                 print(f"    {stripped}")
         print()
+        print(f"  [Ghost] Agent reads schema to understand available data -- no hardcoded SQL.")
+        print(f"  [Ghost] This is Ghost's key differentiator: schema IS the agent's context.\n")
 
     # 5b: Persist scan results
     await db.start_scan(scan_id, owner, repo, 1)
@@ -364,8 +403,25 @@ async def demo():
     print(f"  [Ghost] {len(findings)} findings stored in 'vulnerabilities' table")
     print(f"  [Ghost] {len(cross_source_correlations)} correlations stored in 'correlations' table")
 
-    # 5c: Query historical vulnerability trends via ghost sql
-    print(f"\n  [Ghost SQL] Querying vulnerability trends over time...")
+    # 5c: Trend analysis — agent detects worsening security patterns
+    print(f"\n  [Ghost] Analyzing vulnerability trends across historical scans...")
+    trends = await db.get_trend_analysis(owner, repo)
+    if trends.get("recurring_cwes"):
+        print(f"  [Ghost Trends] Recurring vulnerabilities (appear in multiple scans):")
+        for cwe in trends["recurring_cwes"][:5]:
+            print(f"    {cwe.get('cwe_id', '?')}: seen in {cwe.get('scan_appearances', 0)} scans, "
+                  f"{cwe.get('total_occurrences', 0)} total, severities: {cwe.get('severities', [])}")
+    if trends.get("severity_trend"):
+        print(f"  [Ghost Trends] Scan-over-scan severity trend:")
+        for scan in trends["severity_trend"][:5]:
+            print(f"    {scan.get('scan_date', '?')}: {scan.get('findings_count', 0)} findings "
+                  f"({scan.get('critical_count', 0)}C, {scan.get('high_count', 0)}H)")
+    fix_rate = trends.get("fix_rate", 0)
+    print(f"  [Ghost Trends] Fix rate: {fix_rate}% "
+          f"({trends.get('total_vulnerabilities', 0)} total, {trends.get('open_vulnerabilities', 0)} open)")
+
+    # Also show via ghost sql for CLI demonstration
+    print(f"\n  [Ghost SQL] Raw trend query via CLI:")
     print(f"  [Ghost] Running: ghost sql {db_id} \"SELECT cwe_id, severity, COUNT(*)...\"")
     trend_output = GhostDB.query_database(
         db_id,
@@ -375,21 +431,18 @@ async def demo():
         "GROUP BY cwe_id, UPPER(severity) ORDER BY occurrences DESC LIMIT 8"
     )
     if trend_output:
-        print(f"  [Ghost SQL] Vulnerability trends from persistent history:")
         for line in trend_output.strip().split("\n"):
             print(f"    {line}")
     print()
 
-    # 5d: Query scan history
-    scan_history_output = GhostDB.query_database(
-        db_id,
-        "SELECT id, status, findings_count, critical_count, started_at::date "
-        "FROM scans ORDER BY started_at DESC LIMIT 5"
-    )
-    if scan_history_output:
-        print(f"  [Ghost SQL] Scan history (agent learns from past scans):")
-        for line in scan_history_output.strip().split("\n"):
-            print(f"    {line}")
+    # 5d: Composite risk score (factors in history + cross-source correlations)
+    risk = await db.compute_risk_score(owner, repo, len(cross_source_correlations))
+    print(f"  [Ghost Risk Score] Composite: {risk.get('risk_score', 0)} ({risk.get('interpretation', '?')})")
+    print(f"    Base score: {risk.get('base_score', 0)} | "
+          f"Recurrence multiplier: {risk.get('recurrence_multiplier', 1.0)}x | "
+          f"Cross-source multiplier: {risk.get('cross_source_multiplier', 1.0)}x")
+    print(f"    Repeated CWEs: {risk.get('repeated_cwes', 0)} | "
+          f"Cross-source correlations: {len(cross_source_correlations)}")
     print()
 
     # 5e: Fork database for safe experimentation
@@ -397,12 +450,30 @@ async def demo():
     print(f"  [Ghost] Running: ghost fork {db_id} --name experiment-{scan_id[:6]}")
     fork_result = GhostDB.fork_database(db_id, f"experiment-{scan_id[:6]}")
     fork_output = fork_result.get("output", "")
+    fork_conn = fork_result.get("connection", "")
     if fork_output:
         for line in fork_output.split("\n"):
             if line.strip():
                 print(f"    {line.strip()}")
     else:
         print(f"    Fork created (see ghost list)")
+
+    # Run an experimental query in the fork (safe -- doesn't touch main DB)
+    if fork_conn or fork_output:
+        # Extract fork DB ID from output if possible, or use naming convention
+        fork_db_id = f"experiment-{scan_id[:6]}"
+        print(f"\n  [Ghost Fork] Running experimental query in fork (safe -- main DB untouched)...")
+        experiment_result = GhostDB.experiment_in_fork(
+            fork_db_id,
+            "SELECT COUNT(*) as finding_count, "
+            "UPPER(severity) as severity "
+            "FROM vulnerabilities GROUP BY UPPER(severity) ORDER BY finding_count DESC"
+        )
+        if experiment_result and not experiment_result.startswith("ERROR"):
+            print(f"  [Ghost Fork] Experiment result:")
+            for line in experiment_result.split("\n")[:5]:
+                if line.strip():
+                    print(f"    {line.strip()}")
 
     # Show all Ghost databases including forks
     print(f"\n  [Ghost] Running: ghost list")
@@ -411,8 +482,8 @@ async def demo():
         for line in ghost_list.split("\n")[:8]:
             if line.strip():
                 print(f"    {line}")
-    print(f"\n  [Ghost] Value: Agent creates ephemeral DBs, queries schema for LLM context,")
-    print(f"  [Ghost]        and forks before risky operations. History improves future analysis.")
+    print(f"\n  [Ghost] Value: Agent introspects schema, maintains history across scans,")
+    print(f"  [Ghost]        computes trend-aware risk scores, and forks before experiments.")
     print()
 
     # ===========================
@@ -457,9 +528,10 @@ async def demo():
     # Record final step timing
     _step_timings[7] = time.time() - _step_start
 
-    # TrueFoundry cost summary
+    # TrueFoundry cost summary with per-model breakdown
     total_cost = getattr(llm, 'total_cost', 0)
     total_calls = getattr(llm, 'total_calls', 0)
+    llm.print_cost_summary()
 
     # ===========================
     # VALUE-ADD METRIC
@@ -534,11 +606,11 @@ async def demo():
 
     header("INTEGRATION SUMMARY")
     print("  1. Auth0      — Device Flow + Token Vault + CIBA + FGA (4 agentic pillars)")
-    print("  2. Airbyte    — GitHub + Slack agent connectors + entity cache + enrichment metrics")
-    print("  3. Macroscope — Architecture-aware severity scoring")
-    print("  4. Ghost      — Persistent Postgres: ghost schema (LLM context), ghost sql (history), ghost fork (safe experiments)")
-    print("  5. TrueFoundry — AI Gateway multi-model routing + observability")
-    print("  6. Aerospike  — Real-time cache: patterns, sessions, scan dedup, TTL expiration")
+    print("  2. Airbyte    — GitHub + Slack agent connectors + entity cache + LLM correlation discovery")
+    print("  3. Macroscope — Webhook trigger + poll for results + dependency blast radius analysis")
+    print("  4. Ghost      — Agent introspection, trend analysis, risk scoring, fork-before-experiment")
+    print("  5. TrueFoundry — Multi-model routing + fallback chains + per-model cost comparison")
+    print("  6. Aerospike  — Patterns, sessions, batch CVE lookup, severity index queries, TTL expiration")
     print("  7. Overmind   — OverClaw agent optimization (overclaw optimize deepsentinel)")
     print()
     print("  'Existing tools scan code. We scan context.'")

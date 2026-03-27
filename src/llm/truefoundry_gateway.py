@@ -2,12 +2,35 @@
 TrueFoundry AI Gateway integration for DeepSentinel.
 Routes all LLM calls through TrueFoundry for multi-model routing,
 observability, rate limiting, and cost tracking.
+
+Key TrueFoundry features used:
+- Multi-model routing: different models for different task complexity
+- Fallback chains: if primary model fails, try secondary
+- Cost tracking: per-call and aggregate cost with model comparison
+- Metadata logging: every call tagged with agent/task for observability
+- Virtual model mapping: abstract model names to concrete deployments
+
 When TrueFoundry is not configured, uses Anthropic Claude directly.
 """
 import json
 import os
+import time
 
 import anthropic
+
+
+# Cost per 1M tokens for cost comparison metrics
+MODEL_COSTS = {
+    "gpt-4o-mini": {"input": 0.15, "output": 0.60},
+    "gpt-4o": {"input": 2.50, "output": 10.00},
+    "claude-sonnet-4-20250514": {"input": 3.00, "output": 15.00},
+}
+
+# Fallback chains: if primary model fails, try these in order
+FALLBACK_CHAINS = {
+    "gpt-4o-mini": ["gpt-4o-mini", "gpt-4o"],
+    "gpt-4o": ["gpt-4o", "gpt-4o-mini"],
+}
 
 
 class TrueFoundryGateway:
@@ -16,12 +39,16 @@ class TrueFoundryGateway:
         self.tfy_base = base_url or os.environ.get("TRUEFOUNDRY_BASE_URL", "https://gateway.truefoundry.ai")
         self.anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
 
+        # Per-model cost and latency tracking
+        self._model_stats: dict[str, dict] = {}
+
         if self.tfy_key:
             # Route through TrueFoundry gateway
             from openai import OpenAI
             self.openai_client = OpenAI(api_key=self.tfy_key, base_url=self.tfy_base)
             self.mode = "truefoundry"
             print("[TrueFoundry] AI Gateway connected — multi-model routing active")
+            print(f"[TrueFoundry] Fallback chains: {json.dumps(FALLBACK_CHAINS)}")
         elif self.anthropic_key:
             self.anthropic_client = anthropic.Anthropic(api_key=self.anthropic_key)
             self.mode = "anthropic"
@@ -31,44 +58,86 @@ class TrueFoundryGateway:
             print("[TrueFoundry] No LLM keys configured")
 
     def chat(self, model: str, messages: list, metadata: dict = None, **kwargs) -> dict:
-        """Send a chat completion. Routes through TrueFoundry or Anthropic."""
+        """Send a chat completion with automatic fallback.
+
+        Routes through TrueFoundry gateway with fallback chain support:
+        if the primary model returns an error, tries the next model in the
+        chain. All calls are tagged with metadata for TrueFoundry observability.
+        """
         if self.mode == "truefoundry":
-            return self._chat_truefoundry(model, messages, metadata, **kwargs)
+            return self._chat_with_fallback(model, messages, metadata, **kwargs)
         elif self.mode == "anthropic":
             return self._chat_anthropic(messages, **kwargs)
         else:
             return {"content": "[No LLM configured]", "model": "none", "usage": {}}
 
+    def _chat_with_fallback(self, model: str, messages: list, metadata: dict = None, **kwargs) -> dict:
+        """Try the model chain until one succeeds."""
+        chain = FALLBACK_CHAINS.get(model, [model])
+        last_error = None
+
+        for attempt_model in chain:
+            try:
+                result = self._chat_truefoundry(attempt_model, messages, metadata, **kwargs)
+                if attempt_model != model:
+                    print(f"  [TrueFoundry] Fallback: {model} -> {attempt_model} succeeded")
+                return result
+            except Exception as e:
+                last_error = e
+                print(f"  [TrueFoundry] {attempt_model} failed ({e}), trying next in chain...")
+
+        # All models in chain failed
+        print(f"  [TrueFoundry] All models in fallback chain failed: {last_error}")
+        return {"content": f"[LLM error: {last_error}]", "model": "error", "usage": {}}
+
     def _chat_truefoundry(self, model: str, messages: list, metadata: dict = None, **kwargs) -> dict:
-        """Route through TrueFoundry AI Gateway."""
+        """Route through TrueFoundry AI Gateway with per-model tracking."""
         extra_headers = {}
+        meta = {"tfy_log_request": "true", "agent": "deepsentinel"}
         if metadata:
-            extra_headers["X-TFY-METADATA"] = json.dumps({"tfy_log_request": "true", **metadata})
+            meta.update(metadata)
+        extra_headers["X-TFY-METADATA"] = json.dumps(meta)
 
         tfy_model = model
         if not model.startswith(("openai", "anthropic")):
             tfy_model = f"openai-main/{model}" if "claude" not in model else f"anthropic-main/{model}"
 
+        t0 = time.perf_counter()
         response = self.openai_client.chat.completions.create(
             model=tfy_model, messages=messages,
-            extra_headers=extra_headers if extra_headers else None, **kwargs,
+            extra_headers=extra_headers, **kwargs,
         )
+        latency_ms = (time.perf_counter() - t0) * 1000
+
         prompt_tokens = response.usage.prompt_tokens if response.usage else 0
         completion_tokens = response.usage.completion_tokens if response.usage else 0
         total_tokens = prompt_tokens + completion_tokens
 
-        # Cost estimation (GPT-4o-mini: $0.15/1M input, $0.60/1M output)
-        cost = (prompt_tokens * 0.00000015) + (completion_tokens * 0.0000006)
+        # Cost estimation using model-specific rates
+        base_model = model.split("/")[-1] if "/" in model else model
+        rates = MODEL_COSTS.get(base_model, MODEL_COSTS.get("gpt-4o-mini"))
+        cost = (prompt_tokens * rates["input"] / 1_000_000) + (completion_tokens * rates["output"] / 1_000_000)
         self.total_cost = getattr(self, 'total_cost', 0) + cost
         self.total_calls = getattr(self, 'total_calls', 0) + 1
 
-        print(f"  [TrueFoundry] {tfy_model} | {total_tokens} tokens | ${cost:.4f} | via gateway.truefoundry.ai")
+        # Track per-model stats
+        if base_model not in self._model_stats:
+            self._model_stats[base_model] = {"calls": 0, "tokens": 0, "cost": 0, "latency_ms": 0}
+        stats = self._model_stats[base_model]
+        stats["calls"] += 1
+        stats["tokens"] += total_tokens
+        stats["cost"] += cost
+        stats["latency_ms"] += latency_ms
+
+        task = meta.get("task", "")
+        print(f"  [TrueFoundry] {tfy_model} | {total_tokens} tok | ${cost:.4f} | {latency_ms:.0f}ms | {task}")
 
         return {
             "content": response.choices[0].message.content,
             "model": response.model,
             "usage": {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens},
             "cost": cost,
+            "latency_ms": latency_ms,
         }
 
     def _chat_anthropic(self, messages: list, **kwargs) -> dict:
@@ -169,3 +238,52 @@ class TrueFoundryGateway:
             temperature=0.3,
         )
         return result["content"]
+
+    def get_model_comparison(self) -> dict:
+        """Return per-model cost/performance comparison.
+
+        This demonstrates TrueFoundry's multi-model routing value:
+        the gateway tracks which model is used for which task, showing
+        the cost savings of using lightweight models for fast scans
+        vs. powerful models only for deep verification.
+        """
+        comparison = {}
+        for model, stats in self._model_stats.items():
+            calls = stats["calls"]
+            comparison[model] = {
+                "calls": calls,
+                "total_tokens": stats["tokens"],
+                "total_cost": round(stats["cost"], 6),
+                "avg_latency_ms": round(stats["latency_ms"] / calls, 0) if calls > 0 else 0,
+                "cost_per_call": round(stats["cost"] / calls, 6) if calls > 0 else 0,
+            }
+        return comparison
+
+    def print_cost_summary(self):
+        """Print a cost breakdown showing multi-model routing savings."""
+        comparison = self.get_model_comparison()
+        total_cost = getattr(self, "total_cost", 0)
+        total_calls = getattr(self, "total_calls", 0)
+
+        print(f"\n  [TrueFoundry Cost Summary]")
+        print(f"    Total: {total_calls} calls, ${total_cost:.4f}")
+        for model, stats in comparison.items():
+            print(
+                f"    {model}: {stats['calls']} calls, "
+                f"${stats['total_cost']:.4f}, "
+                f"avg {stats['avg_latency_ms']:.0f}ms"
+            )
+
+        # Calculate savings vs. using the most expensive model for everything
+        if comparison and total_calls > 0:
+            most_expensive = max(
+                MODEL_COSTS.values(),
+                key=lambda r: r["input"] + r["output"],
+            )
+            all_expensive_cost = sum(
+                s["total_tokens"] * (most_expensive["input"] + most_expensive["output"]) / 2_000_000
+                for s in self._model_stats.values()
+            )
+            if all_expensive_cost > 0 and all_expensive_cost > total_cost:
+                savings_pct = (1 - total_cost / all_expensive_cost) * 100
+                print(f"    Multi-model savings: {savings_pct:.0f}% vs. using only the most expensive model")
