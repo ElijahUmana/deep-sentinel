@@ -37,6 +37,17 @@ class SlackContext:
 
 
 @dataclass
+class Correlation:
+    correlation_type: str       # e.g. deferred_security_work, known_issue_unresolved
+    confidence: str             # HIGH, MEDIUM, LOW
+    github_ref: str             # file path or PR reference
+    slack_ref: str              # channel + timestamp
+    slack_text: str             # relevant message excerpt
+    risk_note: str              # what risk this reveals
+    why_it_matters: str         # why code-only analysis would miss this
+
+
+@dataclass
 class CrossSourceContext:
     github: PRData = None
     slack: SlackContext = None
@@ -50,6 +61,33 @@ SECURITY_KEYWORDS = [
     "encrypt", "SSL", "TLS", "OWASP", "exploit", "patch",
     "dependency", "risk", "compliance", "skip validation",
     "no auth", "hardcoded", "plaintext", "password", "leak",
+]
+
+# Keyword groups for automatic correlation discovery
+DEFERRED_WORK_KEYWORDS = [
+    "skip", "defer", "later", "q2", "q3", "q4", "backlog", "todo",
+    "next sprint", "punt", "tech debt", "won't fix", "postpone",
+    "low priority", "not now", "after launch", "follow-up", "future",
+]
+
+UNRESOLVED_ISSUE_KEYWORDS = [
+    "hardcoded", "still", "not yet", "need to", "hasn't been",
+    "waiting on", "blocked", "hasn't been fixed", "known issue",
+    "temporary", "workaround", "hack", "quick fix", "band-aid",
+    "someone should", "can someone", "when will", "needs to be",
+]
+
+CODE_REVIEW_CONCERN_KEYWORDS = [
+    "flagged", "concern", "review", "dangerous", "unsafe",
+    "risky", "shouldn't", "why are we", "red flag", "scary",
+    "yikes", "problematic", "bad practice", "anti-pattern",
+    "vulnerable", "exploitable", "insecure", "alarm",
+]
+
+CRYPTO_WEAKNESS_KEYWORDS = [
+    "md5", "sha1", "plaintext", "cleartext", "weak hash",
+    "upgrade", "bcrypt", "argon", "deprecat", "obsolete",
+    "broken cipher", "rot13", "base64 encode", "not encrypted",
 ]
 
 
@@ -296,6 +334,99 @@ class AirbyteDataLayer:
         return []
 
     # ===========================
+    # GITHUB ISSUES AS CROSS-SOURCE CONTEXT
+    # ===========================
+
+    async def get_security_issues(self, owner: str, repo: str) -> list:
+        """
+        Pull GitHub Issues labeled 'security' or containing security keywords.
+        This is REAL cross-source data — issues represent team discussions,
+        deferred work, and known vulnerabilities that pure code analysis misses.
+        """
+        issues = []
+        try:
+            # Try Airbyte connector first
+            data = await self._github_execute(
+                "issues", "list",
+                {"owner": owner, "repo": repo, "per_page": 20, "states": ["OPEN"]},
+            )
+            if data:
+                for issue in data:
+                    title = issue.get("title", "") if isinstance(issue, dict) else ""
+                    body = issue.get("body", "") if isinstance(issue, dict) else ""
+                    labels = [l.get("name", "") if isinstance(l, dict) else str(l) for l in (issue.get("labels", []) if isinstance(issue, dict) else [])]
+
+                    # Filter for security-relevant issues
+                    text = f"{title} {body}".lower()
+                    if any(kw in text for kw in SECURITY_KEYWORDS) or "security" in " ".join(labels).lower():
+                        issues.append({
+                            "number": issue.get("number", 0) if isinstance(issue, dict) else 0,
+                            "title": title,
+                            "body": body[:500],
+                            "labels": labels,
+                            "created_at": issue.get("created_at", "") if isinstance(issue, dict) else "",
+                            "source": "github_issues",
+                        })
+        except Exception:
+            pass
+
+        # Fallback to REST API
+        if not issues:
+            try:
+                async with httpx.AsyncClient() as client:
+                    resp = await client.get(
+                        f"https://api.github.com/repos/{owner}/{repo}/issues",
+                        headers={"Authorization": f"Bearer {self.github_token}"},
+                        params={"state": "all", "per_page": 30},
+                    )
+                    if resp.status_code == 200:
+                        for issue in resp.json():
+                            if issue.get("pull_request"):
+                                continue  # Skip PRs
+                            title = issue.get("title", "")
+                            body = issue.get("body", "") or ""
+                            text = f"{title} {body}".lower()
+                            labels = [l.get("name", "") for l in issue.get("labels", [])]
+
+                            if any(kw in text for kw in SECURITY_KEYWORDS) or "security" in " ".join(labels).lower():
+                                issues.append({
+                                    "number": issue.get("number", 0),
+                                    "title": title,
+                                    "body": body[:500],
+                                    "labels": labels,
+                                    "created_at": issue.get("created_at", ""),
+                                    "source": "github_issues",
+                                })
+            except Exception:
+                pass
+
+        return issues
+
+    async def get_pr_comments(self, owner: str, repo: str, pr_number: int) -> list:
+        """Pull PR review comments — these contain security review context."""
+        comments = []
+        try:
+            async with httpx.AsyncClient() as client:
+                # PR comments
+                resp = await client.get(
+                    f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments",
+                    headers={"Authorization": f"Bearer {self.github_token}"},
+                )
+                if resp.status_code == 200:
+                    for comment in resp.json():
+                        body = comment.get("body", "")
+                        if any(kw in body.lower() for kw in SECURITY_KEYWORDS):
+                            comments.append({
+                                "body": body[:500],
+                                "user": comment.get("user", {}).get("login", ""),
+                                "created_at": comment.get("created_at", ""),
+                                "source": "pr_comments",
+                            })
+        except Exception:
+            pass
+        return comments
+
+    # ===========================
     # SLACK DATA
     # ===========================
 
@@ -357,6 +488,130 @@ class AirbyteDataLayer:
             await self.slack.execute("messages", "create", {"channel": channel_id, "text": message})
         except Exception as e:
             print(f"[Airbyte] Slack post error: {e}")
+
+    # ===========================
+    # GITHUB CROSS-SOURCE INTELLIGENCE
+    # ===========================
+
+    async def gather_github_intelligence(self, owner: str, repo: str, pr_number: int) -> GitHubIssueContext:
+        """Fetch GitHub issues and PR comments as cross-source context.
+
+        This is the real cross-source data: issues represent team decisions,
+        deferred security work, and known vulnerabilities. PR comments capture
+        security review feedback. Code-only scanners have zero visibility into
+        either of these.
+        """
+        issues_task = self.get_security_issues(owner, repo)
+        comments_task = self.get_pr_comments(owner, repo, pr_number)
+        issues, comments = await asyncio.gather(issues_task, comments_task, return_exceptions=True)
+
+        if isinstance(issues, Exception):
+            print(f"[Airbyte] GitHub issues error: {issues}")
+            issues = []
+        if isinstance(comments, Exception):
+            print(f"[Airbyte] PR comments error: {comments}")
+            comments = []
+
+        return GitHubIssueContext(issues=issues, pr_comments=comments)
+
+    def correlate_issues_with_code(self, changed_files: list, issue_ctx: GitHubIssueContext, pr_number: int) -> list:
+        """Build cross-source correlations from real GitHub issues and PR comments.
+
+        Matches issue and comment text against changed file paths and security
+        keyword categories to produce typed correlations. Each correlation
+        explains WHY it matters and what a code-only scanner would miss.
+        """
+        correlations = []
+
+        # Correlate issues with changed files
+        for issue in issue_ctx.issues:
+            issue_text = f"{issue.get('title', '')} {issue.get('body', '')}".lower()
+            issue_title = issue.get("title", "")
+            issue_num = issue.get("number", 0)
+
+            # Determine correlation type from keyword matching
+            corr_type = self._classify_issue(issue_text)
+
+            # Find which changed files this issue references
+            matched_files = []
+            for f in changed_files:
+                file_path = f.get("path", "")
+                file_name = file_path.split("/")[-1] if file_path else ""
+                # Check if the issue mentions this file by name or path
+                if file_name and (file_name in issue_text or file_path.lower() in issue_text):
+                    matched_files.append(file_path)
+
+            if matched_files:
+                correlations.append({
+                    "type": corr_type,
+                    "github_ref": f"PR #{pr_number} + Issue #{issue_num}: {', '.join(matched_files)}",
+                    "context_ref": f"Issue #{issue_num}: {issue_title}",
+                    "context_text": issue.get("body", "")[:200],
+                    "risk_note": self._risk_note_for_type(corr_type, issue_title, matched_files),
+                    "why_code_only_misses": self._why_code_only_misses(corr_type),
+                })
+
+        # Correlate PR comments with changed files
+        for comment in issue_ctx.pr_comments:
+            comment_text = comment.get("body", "").lower()
+            comment_user = comment.get("user", "reviewer")
+
+            corr_type = self._classify_issue(comment_text)
+            matched_files = []
+            for f in changed_files:
+                file_path = f.get("path", "")
+                file_name = file_path.split("/")[-1] if file_path else ""
+                if file_name and (file_name in comment_text or file_path.lower() in comment_text):
+                    matched_files.append(file_path)
+
+            # Even comments without specific file mentions are valuable
+            # if they contain security keywords
+            if matched_files or any(kw in comment_text for kw in SECURITY_KEYWORDS[:10]):
+                correlations.append({
+                    "type": "code_review_concern",
+                    "github_ref": f"PR #{pr_number}: {', '.join(matched_files) if matched_files else 'general'}",
+                    "context_ref": f"PR #{pr_number} comment by {comment_user}",
+                    "context_text": comment.get("body", "")[:200],
+                    "risk_note": f"Security concern raised in PR review by {comment_user}: {comment.get('body', '')[:100]}",
+                    "why_code_only_misses": "Code scanners analyze syntax, not team review discussions",
+                })
+
+        return correlations
+
+    def _classify_issue(self, text: str) -> str:
+        """Classify an issue/comment into a correlation type based on keyword groups."""
+        text = text.lower()
+        scores = {
+            "deferred_security_work": sum(1 for kw in DEFERRED_WORK_KEYWORDS if kw in text),
+            "known_issue_unresolved": sum(1 for kw in UNRESOLVED_ISSUE_KEYWORDS if kw in text),
+            "code_review_concern": sum(1 for kw in CODE_REVIEW_CONCERN_KEYWORDS if kw in text),
+            "crypto_upgrade_needed": sum(1 for kw in CRYPTO_WEAKNESS_KEYWORDS if kw in text),
+        }
+        best = max(scores, key=scores.get)
+        return best if scores[best] > 0 else "security_discussion"
+
+    def _risk_note_for_type(self, corr_type: str, title: str, files: list) -> str:
+        """Generate a risk note explaining what this correlation reveals."""
+        files_str = ", ".join(files[:3])
+        notes = {
+            "deferred_security_work": f"Security work EXPLICITLY DEFERRED per team decision in {files_str} -- Snyk/CodeQL cannot detect deferred remediation",
+            "known_issue_unresolved": f"Known vulnerability acknowledged but NOT yet fixed in {files_str} -- risk is accumulating",
+            "code_review_concern": f"Security concern raised about {files_str} -- flagged by team but may not be addressed",
+            "crypto_upgrade_needed": f"Weak cryptography in {files_str} identified as needing upgrade -- team aware but not yet migrated",
+            "security_discussion": f"Security-relevant discussion about {files_str}: {title[:80]}",
+        }
+        return notes.get(corr_type, f"Security context for {files_str}: {title[:80]}")
+
+    def _why_code_only_misses(self, corr_type: str) -> str:
+        """Explain why a code-only scanner would miss this correlation."""
+        reasons = {
+            "deferred_security_work": "Code scanners see the vulnerability but not the team decision to defer fixing it -- the risk context is invisible",
+            "known_issue_unresolved": "The code looks the same whether or not the team knows about the issue -- scanners cannot detect acknowledged-but-unresolved risk",
+            "code_review_concern": "Review comments exist outside the code -- scanners never see them",
+            "crypto_upgrade_needed": "Scanners flag weak crypto but miss that the team already has a migration plan (or is ignoring it)",
+            "security_discussion": "Team context about security priorities lives in issues and comments, not in code",
+        }
+        return reasons.get(corr_type, "Code-only analysis has no visibility into team discussions")
 
     # ===========================
     # CROSS-SOURCE CORRELATION

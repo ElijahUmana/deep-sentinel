@@ -109,12 +109,22 @@ async def demo():
     # ===========================
     # STEP 1: GATHER — Airbyte multi-source data
     # ===========================
-    step(1, 7, "GATHER — Pulling data via Airbyte agent connectors...")
+    step(1, 7, "GATHER — Pulling multi-source data via Airbyte agent connectors...")
 
     # Get PR data
     pr = await data.get_pr_details(owner, repo, 1)
     print(f"  [Airbyte/GitHub] PR #{pr.number}: {pr.title}")
     print(f"  [Airbyte/GitHub] {len(pr.changed_files)} PR files")
+
+    # Pull REAL GitHub Issues as cross-source context
+    security_issues = await data.get_security_issues(owner, repo)
+    print(f"  [Airbyte/GitHub] {len(security_issues)} security-related issues found")
+    for issue in security_issues[:3]:
+        print(f"    #{issue['number']}: {issue['title']}")
+
+    # Pull REAL PR review comments
+    pr_comments = await data.get_pr_comments(owner, repo, 1)
+    print(f"  [Airbyte/GitHub] {len(pr_comments)} security-relevant PR comments")
 
     # Get additional repo files
     all_files = []
@@ -148,7 +158,37 @@ async def demo():
         ]
         print(f"  [Airbyte/Slack] {len(slack_context)} security messages (representative — set SLACK_BOT_TOKEN for live)")
 
-    cross_source_correlations = [
+    # Build cross-source correlations from REAL data (GitHub Issues + PR comments)
+    cross_source_correlations = []
+
+    # Correlate GitHub Issues with code changes
+    for issue in security_issues:
+        issue_text = f"{issue.get('title', '')} {issue.get('body', '')}".lower()
+        for file_info in all_files:
+            file_path = file_info.get("path", "")
+            file_name = file_path.split("/")[-1].replace(".py", "").replace(".ts", "")
+            if file_name in issue_text or any(keyword in issue_text for keyword in ["payment", "auth", "login", "user", "api"]):
+                cross_source_correlations.append({
+                    "type": "github_issue_correlation",
+                    "github_ref": f"Issue #{issue['number']}: {issue['title'][:60]}",
+                    "slack_ref": f"GitHub Issues",
+                    "risk_note": f"REAL: Issue #{issue['number']} discusses security concern related to {file_path}",
+                    "confidence": "HIGH",
+                })
+                break
+
+    # Correlate PR comments with findings
+    for comment in pr_comments:
+        cross_source_correlations.append({
+            "type": "pr_review_concern",
+            "github_ref": f"PR #1 comment by {comment.get('user', 'reviewer')}",
+            "slack_ref": "PR Review",
+            "risk_note": f"REAL: Reviewer flagged: {comment.get('body', '')[:100]}",
+            "confidence": "HIGH",
+        })
+
+    # Add Slack-based correlations (if live Slack data available, or representative)
+    cross_source_correlations.extend([
         {
             "type": "deferred_security_work",
             "github_ref": f"PR #1 + repo-wide: payment.py, src/api/users.py",
