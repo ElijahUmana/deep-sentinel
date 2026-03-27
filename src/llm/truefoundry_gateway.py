@@ -287,3 +287,67 @@ class TrueFoundryGateway:
             if all_expensive_cost > 0 and all_expensive_cost > total_cost:
                 savings_pct = (1 - total_cost / all_expensive_cost) * 100
                 print(f"    Multi-model savings: {savings_pct:.0f}% vs. using only the most expensive model")
+
+    def print_model_comparison_table(self):
+        """Print a detailed model comparison table for the demo.
+
+        Shows exactly WHY multi-model routing matters: which model was used
+        for which task type, the cost difference, and total savings.
+        """
+        comparison = self.get_model_comparison()
+        total_cost = getattr(self, "total_cost", 0)
+        total_calls = getattr(self, "total_calls", 0)
+
+        if not comparison:
+            print("\n  [TrueFoundry] No model calls recorded.")
+            return
+
+        # Determine task assignments per model from the stats
+        model_tasks = {}
+        for model in self._model_stats:
+            base = model.split("/")[-1] if "/" in model else model
+            if "mini" in base:
+                model_tasks[base] = "fast scan, correlation"
+            elif "4o" in base:
+                model_tasks[base] = "deep verification, report"
+            elif "claude" in base.lower() or "sonnet" in base.lower():
+                model_tasks[base] = "analysis, verification"
+            else:
+                model_tasks[base] = "general"
+
+        print(f"\n  MODEL COMPARISON (via TrueFoundry Gateway):")
+        print(f"  {'':>2}{'Model':<25} {'Calls':>5} {'Tokens':>8} {'Cost':>9} {'Avg Latency':>12}   Used for")
+        print(f"  {'-'*90}")
+
+        for model, stats in comparison.items():
+            task = model_tasks.get(model, "general")
+            print(
+                f"  {'':>2}{model:<25} {stats['calls']:>5} {stats['total_tokens']:>8} "
+                f"${stats['total_cost']:>7.4f} {stats['avg_latency_ms']:>9.1f}ms   {task}"
+            )
+
+        print(f"  {'-'*90}")
+        print(f"  {'':>2}{'TOTAL':<25} {total_calls:>5} {'':>8} ${total_cost:>7.4f}")
+
+        # Calculate what it would cost to use only the most expensive model
+        most_expensive_name = max(
+            MODEL_COSTS.keys(),
+            key=lambda m: MODEL_COSTS[m]["input"] + MODEL_COSTS[m]["output"],
+        )
+        most_expensive_rates = MODEL_COSTS[most_expensive_name]
+        all_expensive_cost = 0
+        total_tokens = 0
+        for stats in comparison.values():
+            tokens = stats.get("total_tokens", 0)
+            total_tokens += tokens
+            # Assume roughly 50/50 input/output split for estimation
+            all_expensive_cost += (
+                tokens * (most_expensive_rates["input"] + most_expensive_rates["output"]) / 2_000_000
+            )
+
+        if all_expensive_cost > 0 and all_expensive_cost > total_cost:
+            savings = all_expensive_cost - total_cost
+            savings_pct = (1 - total_cost / all_expensive_cost) * 100
+            print(f"\n  SAVINGS: Using {most_expensive_name} for everything would cost ${all_expensive_cost:.4f}")
+            print(f"  Multi-model routing saved ${savings:.4f} ({savings_pct:.0f}% reduction)")
+            print(f"  Strategy: lightweight models for scanning, powerful models only for verification")

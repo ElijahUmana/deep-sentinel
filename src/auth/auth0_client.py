@@ -341,10 +341,52 @@ class Auth0Client:
         Check if a user is authorized to view security findings for a repository.
         This is the primary FGA gate in the scan pipeline — the agent checks
         permission BEFORE revealing vulnerability details.
+
+        Read access (can_view) is auto-allowed for authenticated agents —
+        this is a PERMISSIVE gate that logs access for audit purposes.
         """
         user = f"user:{user_id}" if not user_id.startswith("user:") else user_id
         repo_obj = f"{owner}/{repo}"
         return await self.fga_check(user, "can_view", "repo_findings", repo_obj)
+
+    async def fga_check_create_ticket(self, user_id: str, owner: str, repo: str) -> bool:
+        """
+        Check if a user is authorized to create security tickets.
+        This is a RESTRICTIVE gate — write actions require explicit authorization
+        and will trigger CIBA approval if the agent does not have direct permission.
+
+        The difference between can_view (read) and create_ticket (write) is the
+        core FGA demonstration: read access is auto-allowed, write access is gated.
+        """
+        user = f"user:{user_id}" if not user_id.startswith("user:") else user_id
+        repo_obj = f"{owner}/{repo}"
+
+        fga_object = f"repo_findings:{repo_obj}"
+
+        if not self.fga_connected:
+            # In permissive mode, write actions are DENIED by default —
+            # this is the opposite of read access. Principle of least privilege.
+            print(f"[Auth0 FGA] Authorization check (strict): {user} create_ticket {fga_object} -> DENIED (write requires explicit grant)")
+            return False
+
+        try:
+            allowed = await FGAAuthorizer.authorize(
+                options={
+                    "build_query": lambda _ctx: ClientCheckRequest(
+                        user=user,
+                        relation="create_ticket",
+                        object=fga_object,
+                    ),
+                },
+                params=self.fga_params,
+            )
+            status = "ALLOWED" if allowed else "DENIED"
+            print(f"[Auth0 FGA] Authorization check: {user} create_ticket {fga_object} -> {status}")
+            return allowed
+        except Exception as e:
+            # FGA unavailable — DENY write actions (fail closed for writes)
+            print(f"[Auth0 FGA] Check failed ({e}), DENYING write action (fail-closed for writes)")
+            return False
 
     async def fga_check_triage(self, user_id: str, finding_id: str) -> bool:
         """Check if user can triage (acknowledge/dismiss) a specific finding."""
