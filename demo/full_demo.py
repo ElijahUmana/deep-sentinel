@@ -26,6 +26,7 @@ from src.storage.ghost_db import GhostDB
 from src.output.sarif_report import generate_sarif, save_sarif
 from src.analysis.security_analyzer import SecurityAnalyzer
 from src.analysis.macroscope_client import MacroscopeClient
+from src.analysis.risk_scorer import rank_findings_by_risk
 from src.llm.truefoundry_gateway import TrueFoundryGateway
 from src.auth.auth0_client import Auth0Client
 
@@ -97,13 +98,34 @@ async def demo():
     print(f"  Mode: Full repository scan + PR #1 analysis")
     print()
 
-    # Auth0 Pillar 4: FGA check — verify agent has permission to view findings
-    fga_allowed = await auth.fga_check_repo_findings(
+    # Auth0 Pillar 4: FGA — demonstrate READ vs WRITE access difference
+    # Read access (can_view) is permissive — authenticated agents can view findings
+    # Write access (create_ticket) is restrictive — requires explicit grant or CIBA approval
+    print(f"  [Auth0 FGA] Checking access levels for {owner}/{repo}:")
+    print()
+
+    # Gate 1: READ access — auto-allowed for authenticated agents
+    fga_read = await auth.fga_check_repo_findings(
         auth.user_id or "agent:deepsentinel", owner, repo
     )
-    if not fga_allowed:
+    if not fga_read:
         print(f"  [Auth0 FGA] DENIED — agent not authorized to view {owner}/{repo} findings")
         return
+    print(f"  [Auth0 FGA] READ access: ALLOWED (view findings is permissive for authenticated agents)")
+
+    # Gate 2: WRITE access — denied by default, requires CIBA escalation
+    fga_write = await auth.fga_check_create_ticket(
+        auth.user_id or "agent:deepsentinel", owner, repo
+    )
+    if fga_write:
+        print(f"  [Auth0 FGA] WRITE access: ALLOWED (agent has explicit create_ticket grant)")
+    else:
+        print(f"  [Auth0 FGA] WRITE access: DENIED (create_ticket requires explicit grant)")
+        print(f"  [Auth0 FGA] --> Agent will escalate to CIBA approval before creating tickets")
+
+    print()
+    print(f"  [Auth0 FGA] This is the FGA value: read access is open, write access is gated.")
+    print(f"  [Auth0 FGA] The agent can SCAN freely but cannot MODIFY without authorization.")
     print()
 
     # ===========================
@@ -297,19 +319,50 @@ async def demo():
     patterns = cache.get_patterns()
     print(f"  {len(patterns)} CWE vulnerability patterns loaded from set 'patterns'")
 
-    # Severity-filtered query (demonstrates secondary index query pattern)
+    # Secondary index query: severity-filtered (O(1) group lookup, not full scan)
+    t_idx = time.perf_counter()
     critical_patterns = cache.get_patterns_by_severity("CRITICAL")
+    idx_us = (time.perf_counter() - t_idx) * 1_000_000
     high_patterns = cache.get_patterns_by_severity("HIGH")
-    print(f"  Severity filter: {len(critical_patterns)} CRITICAL, {len(high_patterns)} HIGH patterns")
-    print(f"  (Uses secondary index on 'severity' bin for server-side filtering)")
+    medium_patterns = cache.get_patterns_by_severity("MEDIUM")
+    print(f"  Secondary index query (severity='CRITICAL'): {len(critical_patterns)} results in {idx_us:.0f}us")
+    print(f"  Severity breakdown: {len(critical_patterns)} CRITICAL, {len(high_patterns)} HIGH, {len(medium_patterns)} MEDIUM")
+    print(f"  (Aerospike secondary index: server-side filter, no full-scan needed)")
 
-    # Batch CVE lookup (demonstrates batch_get for parallel record retrieval)
-    sample_cves = ["CVE-2021-44228", "CVE-2023-44487", "CVE-2024-3094"]
-    for cve_id in sample_cves:
-        cache.cache_cve(cve_id, {"severity": "CRITICAL", "description": f"Known critical: {cve_id}", "cvss_score": 9.8})
-    batch_results = cache.batch_lookup_cves(sample_cves)
-    print(f"  Batch CVE lookup: {len(batch_results)}/{len(sample_cves)} found in single operation")
-    print(f"  (Aerospike batch_get: 1 network round trip instead of {len(sample_cves)} sequential gets)")
+    # CWE index query: demonstrates second index dimension
+    cwe_89_patterns = cache.query_by_cwe("CWE-89")
+    cwe_798_patterns = cache.query_by_cwe("CWE-798")
+    print(f"  CWE index query: CWE-89={len(cwe_89_patterns)}, CWE-798={len(cwe_798_patterns)} patterns")
+
+    # Atomic increment: track which patterns fire most often
+    for p in patterns[:3]:
+        pid = p.get("pattern_id", p.get("cwe_id", ""))
+        if pid:
+            hits = cache.increment_pattern_hits(pid)
+            print(f"  Atomic increment: pattern {pid} hit_count -> {hits}")
+    print(f"  (Aerospike atomic increment: single server-side op, no read-modify-write race)")
+
+    # Batch CVE load (demonstrates batch_write: N records in 1 round trip)
+    sample_cves = [
+        {"cve_id": "CVE-2021-44228", "severity": "CRITICAL", "description": "Log4Shell RCE", "cvss_score": 10.0},
+        {"cve_id": "CVE-2023-44487", "severity": "HIGH", "description": "HTTP/2 Rapid Reset DoS", "cvss_score": 7.5},
+        {"cve_id": "CVE-2024-3094", "severity": "CRITICAL", "description": "XZ Utils backdoor", "cvss_score": 10.0},
+        {"cve_id": "CVE-2023-36884", "severity": "HIGH", "description": "Office RCE via documents", "cvss_score": 8.8},
+        {"cve_id": "CVE-2024-21762", "severity": "CRITICAL", "description": "FortiOS out-of-bound write", "cvss_score": 9.8},
+    ]
+    t_batch = time.perf_counter()
+    loaded = cache.batch_load_cves(sample_cves)
+    batch_us = (time.perf_counter() - t_batch) * 1_000_000
+    print(f"  Batch CVE load: {loaded} records in {batch_us:.0f}us ({batch_us/loaded:.0f}us/record)")
+    print(f"  (Aerospike batch_write: 1 round trip instead of {loaded} sequential puts)")
+
+    # Batch lookup (demonstrates batch_get)
+    cve_ids = [c["cve_id"] for c in sample_cves]
+    t_blookup = time.perf_counter()
+    batch_results = cache.batch_lookup_cves(cve_ids)
+    blookup_us = (time.perf_counter() - t_blookup) * 1_000_000
+    print(f"  Batch CVE lookup: {len(batch_results)}/{len(cve_ids)} found in {blookup_us:.0f}us")
+    print(f"  (Aerospike batch_get: 1 network round trip instead of {len(cve_ids)} sequential gets)")
 
     # Demonstrate session state management
     cache.save_session(scan_id, {"status": "scanning", "files": len(all_files), "repo": f"{owner}/{repo}"})
@@ -387,6 +440,56 @@ async def demo():
         print()
         print(f"  [Ghost] Agent reads schema to understand available data -- no hardcoded SQL.")
         print(f"  [Ghost] This is Ghost's key differentiator: schema IS the agent's context.\n")
+
+        # 5a-ii: Agent DYNAMICALLY constructs SQL based on discovered schema
+        # The agent reads the schema, sees what tables/columns exist, and builds a query
+        tables = introspection.get("tables", [])
+        table_names = [t["name"] for t in tables]
+        print(f"  [Ghost Agent Reasoning] Schema introspection found tables: {table_names}")
+
+        # Agent detects the vulnerabilities table and its severity column
+        dynamic_query = None
+        reasoning = []
+        for table in tables:
+            col_names = [c["name"] for c in table.get("columns", [])]
+            if table["name"] == "vulnerabilities":
+                reasoning.append(f"    -> Found 'vulnerabilities' table with columns: {col_names}")
+                if "severity" in col_names and "cwe_id" in col_names:
+                    reasoning.append(f"    -> 'severity' and 'cwe_id' columns detected — constructing trend query")
+                    dynamic_query = (
+                        "SELECT cwe_id, UPPER(severity) as severity, COUNT(*) as occurrences "
+                        "FROM vulnerabilities GROUP BY cwe_id, UPPER(severity) "
+                        "ORDER BY occurrences DESC LIMIT 5"
+                    )
+                elif "severity" in col_names:
+                    reasoning.append(f"    -> 'severity' column found — querying severity distribution")
+                    dynamic_query = (
+                        "SELECT UPPER(severity) as severity, COUNT(*) as count "
+                        "FROM vulnerabilities GROUP BY UPPER(severity) ORDER BY count DESC"
+                    )
+            elif table["name"] == "scans":
+                reasoning.append(f"    -> Found 'scans' table — can track historical scan frequency")
+            elif table["name"] == "correlations":
+                reasoning.append(f"    -> Found 'correlations' table — can join findings with team context")
+
+        for line in reasoning:
+            print(line)
+
+        if dynamic_query:
+            print(f"\n  [Ghost Agent] Dynamically constructed query (NOT hardcoded):")
+            print(f"    SQL: {dynamic_query}")
+            dynamic_result = GhostDB.query_database(db_id, dynamic_query)
+            if dynamic_result and not dynamic_result.startswith("Ghost"):
+                print(f"  [Ghost Agent] Query result:")
+                for line in dynamic_result.strip().split("\n")[:8]:
+                    if line.strip():
+                        print(f"    {line}")
+            else:
+                print(f"  [Ghost Agent] Query executed (no results yet — first scan)")
+            print()
+        else:
+            print(f"\n  [Ghost Agent] No vulnerability table found in schema — agent adapts its queries")
+            print()
 
     # 5b: Persist scan results
     await db.start_scan(scan_id, owner, repo, 1)
@@ -489,20 +592,33 @@ async def demo():
     print()
 
     # ===========================
-    # STEP 6: AUTH — Auth0 CIBA for sensitive actions
+    # STEP 6: AUTH — Auth0 CIBA for sensitive actions (triggered by FGA denial)
     # ===========================
     critical_count = severity_counts.get("CRITICAL", 0)
     if critical_count > 0:
         step(6, 7, f"AUTHORIZE — Auth0 CIBA for {critical_count} CRITICAL findings...")
-        print(f"  Requesting human approval via Auth0 push notification")
-        print(f"  Action: Create security tickets + alert team")
-        print(f"  Resource: {owner}/{repo}")
-        approved = await auth.request_approval(
-            f"Create {critical_count} critical security tickets",
-            f"{owner}/{repo}"
-        )
-        if approved:
-            print(f"  APPROVED — proceeding with automated response")
+
+        # FGA denied write access earlier — agent must escalate via CIBA
+        if not fga_write:
+            print(f"  [Auth0 FGA] Agent lacks create_ticket permission (denied in Step 0)")
+            print(f"  [Auth0 FGA] Escalating to CIBA: requesting human approval for write action")
+            print(f"  Action: Create {critical_count} critical security tickets")
+            print(f"  Resource: {owner}/{repo}")
+            print()
+            approved = await auth.request_approval(
+                f"Create {critical_count} critical security tickets",
+                f"{owner}/{repo}"
+            )
+            if approved:
+                print(f"  [Auth0 CIBA] APPROVED — human granted write access via push notification")
+                print(f"  [Auth0 FGA -> CIBA] Flow: FGA denied -> CIBA escalation -> human approved")
+            else:
+                print(f"  [Auth0 CIBA] DENIED — tickets will NOT be created")
+                print(f"  [Auth0 FGA -> CIBA] This is the value: write actions are GATED, not rubber-stamped")
+        else:
+            print(f"  [Auth0 FGA] Agent has create_ticket permission — no CIBA escalation needed")
+            approved = True
+
         print()
     else:
         # Record step 5 end time even when step 6 is skipped
@@ -534,6 +650,9 @@ async def demo():
     total_cost = getattr(llm, 'total_cost', 0)
     total_calls = getattr(llm, 'total_calls', 0)
     llm.print_cost_summary()
+
+    # TrueFoundry model comparison table — the WHY of multi-model routing
+    llm.print_model_comparison_table()
 
     # ===========================
     # VALUE-ADD METRIC

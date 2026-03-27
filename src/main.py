@@ -186,9 +186,23 @@ class DeepSentinel:
             sev = f.get("severity", "UNKNOWN")
             severity_counts[sev] = severity_counts.get(sev, 0) + 1
 
+        # Apply composite risk scoring
+        from src.analysis.risk_scorer import rank_findings_by_risk
+        historical = await self.db.get_historical_patterns(owner, repo)
+        findings = rank_findings_by_risk(findings, all_correlations, historical, file_contexts)
+
         print(f"\n  Total findings: {len(findings)}")
         for sev, count in sorted(severity_counts.items()):
             print(f"    {sev}: {count}")
+
+        # Show top risk-scored findings
+        top_risk = [f for f in findings if f.get("risk_score", {}).get("composite_score", 0) > 60]
+        if top_risk:
+            print(f"\n  TOP RISK-SCORED FINDINGS (composite > 60):")
+            for f in top_risk[:3]:
+                rs = f.get("risk_score", {})
+                print(f"    [{rs.get('composite_score', 0)}/100] {f.get('title', '?')} ({f.get('file_path', '?')})")
+                print(f"      {rs.get('explanation', '')}")
 
         # ============================
         # STEP 5: STORE (Ghost)
@@ -238,6 +252,17 @@ class DeepSentinel:
                 print("[Auth0 CIBA] Denied — skipping ticket creation")
 
         report = self.analyzer.generate_report(findings, all_correlations)
+
+        # TrueFoundry model comparison
+        if hasattr(self.llm, 'get_model_comparison'):
+            comparison = self.llm.get_model_comparison()
+            if comparison.get("per_model"):
+                print("\n[TrueFoundry] Model Performance Comparison:")
+                for model, stats in comparison["per_model"].items():
+                    avg_latency = stats["latency_ms"] / max(stats["calls"], 1)
+                    print(f"  {model}: {stats['calls']} calls, {stats['tokens']} tokens, ${stats['cost']:.4f}, avg {avg_latency:.0f}ms")
+                if comparison.get("savings_vs_expensive"):
+                    print(f"  SAVINGS: ${comparison['savings_vs_expensive']:.4f} saved by using cheaper models for simple tasks")
 
         print(f"\n{'=' * 60}")
         print(f"  SCAN COMPLETE")

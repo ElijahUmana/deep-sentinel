@@ -199,6 +199,16 @@ class Auth0Client:
     # 3. CIBA — ASYNC AUTHORIZATION
     # ===========================
 
+    @staticmethod
+    def _sanitize_binding_msg(msg: str) -> str:
+        """Sanitize CIBA binding message to Auth0 constraints.
+
+        Auth0 requires: alphanumerics, whitespace, and +-_.,:#  (max 64 chars).
+        """
+        import re as _re
+        cleaned = _re.sub(r"[^a-zA-Z0-9\s+\-_.,:#]", "", msg)
+        return cleaned[:64]
+
     async def request_approval(self, action: str, resource: str, timeout: int = 300) -> bool:
         """
         Request human approval for a sensitive action via CIBA.
@@ -227,7 +237,7 @@ class Auth0Client:
                     "client_id": self.client_id,
                     "client_secret": self.client_secret,
                     "login_hint": login_hint,
-                    "binding_message": f"DS: {action[:30]} on {resource[:25]}"[:64],
+                    "binding_message": self._sanitize_binding_msg(f"DS: {action} on {resource}"),
                     "scope": "openid",
                     "audience": self.audience,
                 },
