@@ -53,10 +53,22 @@ class TrueFoundryGateway:
             model=tfy_model, messages=messages,
             extra_headers=extra_headers if extra_headers else None, **kwargs,
         )
+        prompt_tokens = response.usage.prompt_tokens if response.usage else 0
+        completion_tokens = response.usage.completion_tokens if response.usage else 0
+        total_tokens = prompt_tokens + completion_tokens
+
+        # Cost estimation (GPT-4o-mini: $0.15/1M input, $0.60/1M output)
+        cost = (prompt_tokens * 0.00000015) + (completion_tokens * 0.0000006)
+        self.total_cost = getattr(self, 'total_cost', 0) + cost
+        self.total_calls = getattr(self, 'total_calls', 0) + 1
+
+        print(f"  [TrueFoundry] {tfy_model} | {total_tokens} tokens | ${cost:.4f} | via gateway.truefoundry.ai")
+
         return {
             "content": response.choices[0].message.content,
             "model": response.model,
-            "usage": {"prompt_tokens": response.usage.prompt_tokens, "completion_tokens": response.usage.completion_tokens},
+            "usage": {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens},
+            "cost": cost,
         }
 
     def _chat_anthropic(self, messages: list, **kwargs) -> dict:
@@ -82,10 +94,21 @@ class TrueFoundryGateway:
             temperature=temp,
         )
         content = response.content[0].text if response.content else ""
+        input_tokens = response.usage.input_tokens if response.usage else 0
+        output_tokens = response.usage.output_tokens if response.usage else 0
+
+        # Cost estimation (Claude Sonnet: $3/1M input, $15/1M output)
+        cost = (input_tokens * 0.000003) + (output_tokens * 0.000015)
+        self.total_cost = getattr(self, 'total_cost', 0) + cost
+        self.total_calls = getattr(self, 'total_calls', 0) + 1
+
+        print(f"  [TrueFoundry] claude-sonnet | {input_tokens + output_tokens} tokens | ${cost:.4f}")
+
         return {
             "content": content,
             "model": response.model,
-            "usage": {"prompt_tokens": response.usage.input_tokens, "completion_tokens": response.usage.output_tokens},
+            "usage": {"prompt_tokens": input_tokens, "completion_tokens": output_tokens},
+            "cost": cost,
         }
 
     def fast_scan(self, code: str, file_path: str) -> dict:

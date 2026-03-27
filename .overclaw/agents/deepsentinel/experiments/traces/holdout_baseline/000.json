@@ -1,0 +1,43 @@
+{
+  "trace_id": "holdout_baseline_000",
+  "input_data": {
+    "code": "import requests\nurl = request.args.get('url')\nresponse = requests.get(url)",
+    "file_path": "proxy.py",
+    "context": "URL proxy service"
+  },
+  "output_data": {
+    "findings": [],
+    "risk_level": "UNKNOWN",
+    "recommendation": "REVIEW",
+    "findings_count": 2,
+    "raw_analysis": "\\n{\\n  \"findings\": [\\n    {\\n      \"severity\": \"CRITICAL\",\\n      \"cwe_id\": \"CWE-918\",\\n      \"title\": \"Server-Side Request Forgery (SSRF)\",\\n      \"line_number\": 3,\\n      \"description\": \"The application makes HTTP requests to user-controlled URLs without validation. Attackers can access internal services, cloud metadata endpoints (e.g., http://169.254.169.254/latest/meta-data/), or perform port scanning against internal infrastructure.\",\\n      \"fix\": \"Implement URL validation with an allowlis"
+  },
+  "spans": [
+    {
+      "span_type": "llm_call",
+      "name": "claude-sonnet-4-20250514",
+      "start_time": 1774643377.123362,
+      "end_time": 1774643384.852213,
+      "latency_ms": 7728.850841522217,
+      "metadata": {
+        "model": "claude-sonnet-4-20250514",
+        "messages_count": 2,
+        "tools_provided": [],
+        "response_content": "```json\n{\n  \"findings\": [\n    {\n      \"severity\": \"CRITICAL\",\n      \"cwe_id\": \"CWE-918\",\n      \"title\": \"Server-Side Request Forgery (SSRF)\",\n      \"line_number\": 3,\n      \"description\": \"The application makes HTTP requests to user-controlled URLs without validation. Attackers can access internal services, cloud metadata endpoints (e.g., http://169.254.169.254/latest/meta-data/), or perform port scanning against internal infrastructure.\",\n      \"fix\": \"Implement URL validation with an allowlist of permitted domains/protocols. Block private IP ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8), localhost, and cloud metadata endpoints. Use URL parsing to validate scheme and hostname before making requests.\"\n    },\n    {\n      \"severity\": \"HIGH\",\n      \"cwe_id\": \"CWE-918\",\n      \"title\": \"Unrestricted Protocol Access\",\n      \"line_number\": 3,\n      \"description\": \"The requests.get() call accepts any protocol scheme, potentially allowing file:// URLs to read local files or other dangerous protocols that could lead to information disclosure or system compromise.\",\n      \"fix\": \"Restrict allowed protocols to only HTTP and HTTPS. Parse the URL and validate that the scheme is in ['http', 'https'] before making the request.\"\n    }\n  ],\n  \"risk_level\": \"CRITICAL\",\n  \"recommendation\": \"BLOCK\"\n}\n```",
+        "tool_calls": [],
+        "prompt_tokens": 212,
+        "completion_tokens": 377,
+        "total_tokens": 589,
+        "cost": 0.006291000000000001
+      },
+      "error": null
+    }
+  ],
+  "start_time": 1774643377.123337,
+  "end_time": 1774643384.85258,
+  "total_latency_ms": 7729.243040084839,
+  "total_tokens": 589,
+  "total_cost": 0.006291000000000001,
+  "score": 0.0,
+  "error": null
+}

@@ -1,0 +1,43 @@
+{
+  "trace_id": "holdout_baseline_001",
+  "input_data": {
+    "code": "def calculate_sum(a, b):\n    return a + b\n\nresult = calculate_sum(5, 10)",
+    "file_path": "math_utils.py",
+    "context": "Utility functions for mathematical operations"
+  },
+  "output_data": {
+    "findings": [],
+    "risk_level": "UNKNOWN",
+    "recommendation": "REVIEW",
+    "findings_count": 0,
+    "raw_analysis": "\\n{\\n  \"findings\": [],\\n  \"risk_level\": \"NONE\",\\n  \"recommendation\": \"APPROVE\"\\n}\\n"
+  },
+  "spans": [
+    {
+      "span_type": "llm_call",
+      "name": "claude-sonnet-4-20250514",
+      "start_time": 1774643377.125643,
+      "end_time": 1774643381.68342,
+      "latency_ms": 4557.776927947998,
+      "metadata": {
+        "model": "claude-sonnet-4-20250514",
+        "messages_count": 2,
+        "tools_provided": [],
+        "response_content": "```json\n{\n  \"findings\": [],\n  \"risk_level\": \"NONE\",\n  \"recommendation\": \"APPROVE\"\n}\n```\n\nThe code contains a simple mathematical utility function that adds two numbers and uses it to calculate a sum. There are no security vulnerabilities present in this code:\n\n- No hardcoded credentials\n- No database interactions (no SQL injection risk)\n- No system command execution (no command injection risk)\n- No web output or user input handling (no XSS risk)\n- No file path operations (no path traversal risk)\n- No cryptographic operations (no weak crypto risk)\n- No deserialization operations (no insecure deserialization risk)\n- No network requests (no SSRF risk)\n\nThis is straightforward mathematical code that performs basic arithmetic operations safely.",
+        "tool_calls": [],
+        "prompt_tokens": 222,
+        "completion_tokens": 183,
+        "total_tokens": 405,
+        "cost": 0.003411
+      },
+      "error": null
+    }
+  ],
+  "start_time": 1774643377.125629,
+  "end_time": 1774643381.6836338,
+  "total_latency_ms": 4558.004856109619,
+  "total_tokens": 405,
+  "total_cost": 0.003411,
+  "score": 0.0,
+  "error": null
+}

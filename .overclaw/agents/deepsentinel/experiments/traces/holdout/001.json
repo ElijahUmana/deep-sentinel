@@ -1,0 +1,43 @@
+{
+  "trace_id": "holdout_001",
+  "input_data": {
+    "code": "def calculate_sum(a, b):\n    return a + b\n\nresult = calculate_sum(5, 10)",
+    "file_path": "math_utils.py",
+    "context": "Utility functions for mathematical operations"
+  },
+  "output_data": {
+    "findings": [],
+    "risk_level": "UNKNOWN",
+    "recommendation": "REVIEW",
+    "findings_count": 0,
+    "raw_analysis": "\\n{\\n  \"findings\": [],\\n  \"risk_level\": \"NONE\",\\n  \"recommendation\": \"APPROVE\"\\n}\\n"
+  },
+  "spans": [
+    {
+      "span_type": "llm_call",
+      "name": "claude-sonnet-4-20250514",
+      "start_time": 1774643371.202843,
+      "end_time": 1774643375.943899,
+      "latency_ms": 4741.055965423584,
+      "metadata": {
+        "model": "claude-sonnet-4-20250514",
+        "messages_count": 2,
+        "tools_provided": [],
+        "response_content": "```json\n{\n  \"findings\": [],\n  \"risk_level\": \"NONE\",\n  \"recommendation\": \"APPROVE\"\n}\n```\n\nThis code contains a simple mathematical utility function that performs basic addition. After analyzing the code for the specified security vulnerabilities:\n\n- **CWE-798 (hardcoded credentials)**: No credentials present\n- **CWE-89 (SQL injection)**: No database operations\n- **CWE-78 (command injection)**: No system commands executed\n- **CWE-79 (XSS)**: No web output or HTML generation\n- **CWE-22 (path traversal)**: No file operations\n- **CWE-327 (weak crypto)**: No cryptographic operations\n- **CWE-502 (insecure deserialization)**: No serialization/deserialization\n- **CWE-918 (SSRF)**: No network requests\n\nThe code is straightforward mathematical computation with no security concerns. It safely performs addition on two parameters and returns the result.",
+        "tool_calls": [],
+        "prompt_tokens": 222,
+        "completion_tokens": 241,
+        "total_tokens": 463,
+        "cost": 0.004281
+      },
+      "error": null
+    }
+  ],
+  "start_time": 1774643371.2028348,
+  "end_time": 1774643375.9444082,
+  "total_latency_ms": 4741.573333740234,
+  "total_tokens": 463,
+  "total_cost": 0.004281,
+  "score": 0.0,
+  "error": null
+}

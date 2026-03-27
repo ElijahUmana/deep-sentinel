@@ -1,0 +1,42 @@
+{
+  "trace_id": "holdout_002",
+  "input_data": {
+    "code": "def process_data():\n    # Some complex logic here\n    pass",
+    "file_path": "processor.py"
+  },
+  "output_data": {
+    "findings": [],
+    "risk_level": "UNKNOWN",
+    "recommendation": "REVIEW",
+    "findings_count": 0,
+    "raw_analysis": "\\n{\\n  \"findings\": [],\\n  \"risk_level\": \"NONE\",\\n  \"recommendation\": \"APPROVE\"\\n}\\n"
+  },
+  "spans": [
+    {
+      "span_type": "llm_call",
+      "name": "claude-sonnet-4-20250514",
+      "start_time": 1774643371.2038898,
+      "end_time": 1774643374.666283,
+      "latency_ms": 3462.393045425415,
+      "metadata": {
+        "model": "claude-sonnet-4-20250514",
+        "messages_count": 2,
+        "tools_provided": [],
+        "response_content": "```json\n{\n  \"findings\": [],\n  \"risk_level\": \"NONE\",\n  \"recommendation\": \"APPROVE\"\n}\n```\n\nThe provided code snippet contains only a function definition with a pass statement and no actual implementation. There are no security vulnerabilities present in this minimal code as it doesn't contain any:\n\n- Hardcoded credentials\n- Database queries\n- Command executions\n- User input handling\n- File operations\n- Cryptographic operations\n- Deserialization\n- Network requests\n\nThe function is essentially a placeholder with no functional code to analyze for security issues.",
+        "tool_calls": [],
+        "prompt_tokens": 203,
+        "completion_tokens": 132,
+        "total_tokens": 335,
+        "cost": 0.002589
+      },
+      "error": null
+    }
+  ],
+  "start_time": 1774643371.203882,
+  "end_time": 1774643374.666782,
+  "total_latency_ms": 3462.899923324585,
+  "total_tokens": 335,
+  "total_cost": 0.002589,
+  "score": 0.0,
+  "error": null
+}
