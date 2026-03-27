@@ -9,6 +9,7 @@ import os
 import sys
 import time
 import uuid
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -22,6 +23,7 @@ init_overmind()
 from src.data.airbyte_client import AirbyteDataLayer
 from src.storage.aerospike_cache import AerospikeCache
 from src.storage.ghost_db import GhostDB
+from src.output.sarif_report import generate_sarif, save_sarif
 from src.analysis.security_analyzer import SecurityAnalyzer
 from src.analysis.macroscope_client import MacroscopeClient
 from src.llm.truefoundry_gateway import TrueFoundryGateway
@@ -49,7 +51,10 @@ def step(num, total, text):
 
 async def demo():
     header("DEEPSENTINEL — Cross-Source Security Intelligence")
-    print("  'Existing tools scan code. We scan context.'")
+    print("  28% of critical security incidents originate OUTSIDE code repositories")
+    print("  — in Slack, Jira, and collaboration tools (GitGuardian 2026).")
+    print("  No existing scanner connects the dots. DeepSentinel does.")
+    print()
     print("  Built with: Auth0 | Airbyte | Macroscope | Ghost | TrueFoundry | Aerospike | Overmind")
     print()
 
@@ -367,6 +372,16 @@ async def demo():
 
     report = analyzer.generate_report(findings, cross_source_correlations)
     elapsed = time.time() - start_time
+
+    # Generate SARIF report (industry-standard format for GitHub Security integration)
+    sarif = generate_sarif(findings, cross_source_correlations, {
+        "scan_id": scan_id,
+        "repository": f"{owner}/{repo}",
+        "start_time": datetime.utcnow().isoformat() + "Z",
+        "end_time": datetime.utcnow().isoformat() + "Z",
+    })
+    save_sarif(sarif, f"deepsentinel-{scan_id}.sarif.json")
+    print(f"  [SARIF] GitHub Security compatible report generated")
 
     # Record final step timing
     _step_timings[7] = time.time() - _step_start
