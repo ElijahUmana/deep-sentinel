@@ -8,3 +8,13 @@ dist/
 build/
 .pytest_cache/
 deepsentinel-*.sarif.json
+COMPETITIVE_ANALYSIS.md
+MASTER_PLAN.md
+RESEARCH_SYNTHESIS.md
+DEVPOST_SUBMISSION.md
+demo/DEMO_OUTPUT.txt
+demo/FINAL_DEMO_OUTPUT.txt
+demo/HIGH_IMPACT_DEMO.md
+demo/NARRATION_SCRIPT.md
+demo/comparison.md
+setup_slack.py
