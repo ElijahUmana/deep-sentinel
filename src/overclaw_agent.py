@@ -4,6 +4,7 @@ This allows Overmind's OverClaw to optimize our security analysis prompts.
 """
 import json
 import re
+
 from overclaw.core.tracer import call_llm
 
 

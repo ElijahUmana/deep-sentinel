@@ -6,6 +6,7 @@ Results are used to enrich security findings with real architectural context.
 """
 import asyncio
 import os
+
 import httpx
 
 
@@ -175,10 +176,17 @@ class MacroscopeClient:
             }
         return {"surface": "queried", "note": "Macroscope query submitted (check dashboard for results)"}
 
-    def enrich_finding(self, finding: dict) -> dict:
-        """Enrich a vulnerability finding with architectural context."""
+    def enrich_finding(self, finding: dict, context: dict | None = None) -> dict:
+        """Enrich a vulnerability finding with architectural context.
+
+        `context` should be the module context already resolved for this file by
+        `get_module_context`, so a finding is enriched with the live Macroscope
+        answer rather than re-deriving a static guess. Falls back to the static
+        heuristic only when no context was resolved.
+        """
         file_path = finding.get("file_path", "")
-        context = self._static_context(file_path)
+        if context is None:
+            context = self._static_context(file_path)
         finding["macroscope_context"] = context
 
         # Severity escalation based on module criticality
@@ -280,7 +288,10 @@ class MacroscopeClient:
             "file_path": file_path,
             "module": module,
             "criticality": criticality,
-            "note": "Macroscope-enriched" if self.connected else "heuristic-based",
+            # This IS the heuristic path — a configured API key does not mean a
+            # Macroscope call was made. get_module_context() overwrites this to
+            # "Macroscope-enriched" only when an answer actually came back.
+            "note": "heuristic-based",
         }
 
     async def close(self):

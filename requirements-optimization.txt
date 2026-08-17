@@ -1,0 +1,7 @@
+# Optional: the Overmind agent-optimization harness used by
+# src/overclaw_agent.py. Kept out of requirements.txt because installing it
+# upgrades opentelemetry-semantic-conventions past the pin overmind-sdk
+# requires, which breaks the core install.
+#
+#   pip install -r requirements-optimization.txt
+overclaw

@@ -1,7 +1,7 @@
 """
 DeepSentinel — Autonomous Multi-Source Security Intelligence Agent
 
-Entry point and orchestrator. Coordinates all 7 sponsor integrations:
+Entry point and orchestrator. Coordinates the seven subsystems:
 - Auth0: Secure identity + Token Vault + CIBA
 - Airbyte: GitHub + Slack data connectors
 - Macroscope: Codebase architecture intelligence
@@ -11,8 +11,6 @@ Entry point and orchestrator. Coordinates all 7 sponsor integrations:
 - Overmind: Prompt optimization
 """
 import asyncio
-import json
-import os
 import sys
 import uuid
 from datetime import datetime
@@ -23,16 +21,18 @@ load_dotenv()
 
 # Initialize Overmind FIRST (must be before any LLM imports)
 from src.analysis.security_analyzer import init_overmind
+
 init_overmind()
 
-from src.config import Config
-from src.auth.auth0_client import Auth0Client
-from src.data.airbyte_client import AirbyteDataLayer
 from src.analysis.macroscope_client import MacroscopeClient
 from src.analysis.security_analyzer import SecurityAnalyzer
-from src.storage.ghost_db import GhostDB
-from src.storage.aerospike_cache import AerospikeCache
+from src.auth.auth0_client import Auth0Client
+from src.config import Config
+from src.data.airbyte_client import AirbyteDataLayer
 from src.llm.truefoundry_gateway import TrueFoundryGateway
+from src.output.github_comment import post_pr_comment
+from src.storage.aerospike_cache import AerospikeCache
+from src.storage.ghost_db import GhostDB
 
 
 class DeepSentinel:
@@ -62,6 +62,18 @@ class DeepSentinel:
 
     async def initialize(self):
         """Set up all connections and preload data."""
+        # Authenticate the operator via device flow. Without a real Auth0
+        # subject there is nobody for CIBA to push an approval request to, so
+        # the approval gate would degrade to a terminal prompt. Skipped when
+        # Auth0 is unconfigured or the session is non-interactive.
+        if self.auth.connected and sys.stdin and sys.stdin.isatty():
+            result = await self.auth.device_flow_login()
+            if result.get("status") != "authenticated":
+                print(
+                    f"[Auth0] Device login unavailable ({result.get('status')}) — "
+                    "approvals will fall back to a terminal prompt"
+                )
+
         # Connect to Ghost Postgres
         await self.db.connect()
 
@@ -69,8 +81,10 @@ class DeepSentinel:
         self.cache.connect()
         self.cache.load_patterns()
 
-        # Query Macroscope for security surface
-        await self.macroscope.get_security_surface()
+        # Query Macroscope for the repo's security surface. Retained on the
+        # instance rather than discarded — it is the repo-level counterpart to
+        # the per-file context resolved during a scan.
+        self.security_surface = await self.macroscope.get_security_surface()
 
         # Log startup
         await self.db.log_audit("agent_started", "system", "deepsentinel")
@@ -116,9 +130,21 @@ class DeepSentinel:
         issue_correlations = self.data.correlate_issues_with_code(
             context.github.changed_files, issue_ctx, pr_number
         )
-        # Merge with Slack-based correlations
-        all_correlations = context.correlations + issue_correlations
-        print(f"  Cross-source correlations: {len(all_correlations)} total")
+        # Strategy 3: LLM discovery of non-obvious links that keyword and
+        # file/module matching cannot reach — paraphrased concerns, implicit
+        # references, architectural implications.
+        llm_correlations = await self.data.discover_llm_correlations(
+            context.github, context.slack, self.llm
+        )
+
+        # Merge all three strategies
+        all_correlations = context.correlations + issue_correlations + llm_correlations
+        print(
+            f"  Cross-source correlations: {len(all_correlations)} total "
+            f"(keyword+file/module: {len(context.correlations)}, "
+            f"issues/comments: {len(issue_correlations)}, "
+            f"LLM discovery: {len(llm_correlations)})"
+        )
 
         # Build context strings from GitHub issues/comments for LLM
         github_context = []
@@ -135,21 +161,41 @@ class DeepSentinel:
         # STEP 2: UNDERSTAND (Macroscope)
         # ============================
         print("\n[2/6] Analyzing codebase architecture via Macroscope...")
+        # Queries Macroscope per changed file and merges the answer with the
+        # static path heuristic. Degrades to the heuristic alone when Macroscope
+        # is unconfigured, and the returned `note` records which one applied.
         file_contexts = {}
-        for f in context.github.changed_files:
-            fctx = self.macroscope._static_context(f.get("path", ""))
-            file_contexts[f.get("path", "")] = fctx
-            print(f"  {f.get('path', '?')}: module={fctx['module']}, criticality={fctx['criticality']}")
+        module_contexts = await asyncio.gather(
+            *(
+                self.macroscope.get_module_context(f.get("path", ""))
+                for f in context.github.changed_files
+            )
+        )
+        for f, fctx in zip(context.github.changed_files, module_contexts, strict=False):
+            path = f.get("path", "")
+            file_contexts[path] = fctx
+            source = "macroscope" if fctx.get("macroscope_answer") else "static"
+            print(
+                f"  {path or '?'}: module={fctx['module']}, "
+                f"criticality={fctx['criticality']} ({source})"
+            )
 
         # ============================
         # STEP 3: CHECK CACHE (Aerospike)
         # ============================
         print("\n[3/6] Checking Aerospike cache...")
-        cached = self.cache.get_cached_scan(f"{owner}/{repo}", pr_number, scan_id[:8])
-        if cached:
-            print("  Cache HIT -- returning cached results")
-            return cached
-        print("  Cache MISS -- proceeding with full analysis")
+        # Keyed on the PR head commit, so re-scanning an unchanged PR hits.
+        # Previously this passed a fresh per-run UUID, which made the key unique
+        # every time and the cache structurally incapable of ever hitting.
+        cache_sha = context.github.head_sha
+        if cache_sha:
+            cached = self.cache.get_cached_scan(f"{owner}/{repo}", pr_number, cache_sha)
+            if cached:
+                print(f"  Cache HIT on {cache_sha[:8]} -- returning cached results")
+                return cached
+            print(f"  Cache MISS on {cache_sha[:8]} -- proceeding with full analysis")
+        else:
+            print("  No head commit resolved -- skipping cache for this scan")
 
         # Get historical patterns from Ghost
         historical = await self.db.get_historical_patterns(owner, repo)
@@ -177,9 +223,12 @@ class DeepSentinel:
 
         findings = self.analyzer.analyze(analysis_context)
 
-        # Enrich findings with Macroscope context
+        # Enrich findings with the module context already resolved in step 2,
+        # so the escalation uses the live Macroscope answer for that file.
         for finding in findings:
-            finding = self.macroscope.enrich_finding(finding)
+            finding = self.macroscope.enrich_finding(
+                finding, file_contexts.get(finding.get("file_path", ""))
+            )
 
         severity_counts = {}
         for f in findings:
@@ -188,7 +237,6 @@ class DeepSentinel:
 
         # Apply composite risk scoring
         from src.analysis.risk_scorer import rank_findings_by_risk
-        historical = await self.db.get_historical_patterns(owner, repo)
         findings = rank_findings_by_risk(findings, all_correlations, historical, file_contexts)
 
         print(f"\n  Total findings: {len(findings)}")
@@ -198,7 +246,7 @@ class DeepSentinel:
         # Show top risk-scored findings
         top_risk = [f for f in findings if f.get("risk_score", {}).get("composite_score", 0) > 60]
         if top_risk:
-            print(f"\n  TOP RISK-SCORED FINDINGS (composite > 60):")
+            print("\n  TOP RISK-SCORED FINDINGS (composite > 60):")
             for f in top_risk[:3]:
                 rs = f.get("risk_score", {})
                 print(f"    [{rs.get('composite_score', 0)}/100] {f.get('title', '?')} ({f.get('file_path', '?')})")
@@ -225,10 +273,11 @@ class DeepSentinel:
         await self.db.complete_scan(scan_id, len(findings), critical_count, high_count)
 
         # Cache in Aerospike
-        self.cache.cache_scan_result(
-            f"{owner}/{repo}", pr_number, scan_id[:8],
-            {"scan_id": scan_id, "findings_count": len(findings), "timestamp": datetime.utcnow().isoformat()},
-        )
+        if cache_sha:
+            self.cache.cache_scan_result(
+                f"{owner}/{repo}", pr_number, cache_sha,
+                {"scan_id": scan_id, "findings_count": len(findings), "timestamp": datetime.utcnow().isoformat()},
+            )
 
         await self.db.log_audit("scan_completed", "scan", scan_id, {
             "findings": len(findings), "critical": critical_count, "high": high_count,
@@ -239,33 +288,42 @@ class DeepSentinel:
         # ============================
         print("\n[6/6] Generating security report...")
 
-        # CIBA: Request approval for critical findings
+        # CIBA: Request approval for critical findings. The decision gates the
+        # write action below — posting a review back onto the PR.
+        ciba_approved = True
         if critical_count > 0:
             print(f"\n[Auth0 CIBA] {critical_count} CRITICAL findings detected")
-            approved = await self.auth.request_approval(
+            ciba_approved = await self.auth.request_approval(
                 f"Create security tickets for {critical_count} critical vulnerabilities",
                 f"{owner}/{repo} PR #{pr_number}",
             )
-            if approved:
+            if ciba_approved:
                 print("[Auth0 CIBA] Approved — creating tickets")
             else:
                 print("[Auth0 CIBA] Denied — skipping ticket creation")
 
         report = self.analyzer.generate_report(findings, all_correlations)
 
-        # TrueFoundry model comparison
-        if hasattr(self.llm, 'get_model_comparison'):
+        # TrueFoundry model comparison. get_model_comparison() returns a flat
+        # {model: stats} mapping — the previous code looked for a "per_model"
+        # key that the method never produces, so this never printed, and would
+        # have raised KeyError on the stat names if it had.
+        if hasattr(self.llm, "get_model_comparison"):
             comparison = self.llm.get_model_comparison()
-            if comparison.get("per_model"):
+            if comparison:
                 print("\n[TrueFoundry] Model Performance Comparison:")
-                for model, stats in comparison["per_model"].items():
-                    avg_latency = stats["latency_ms"] / max(stats["calls"], 1)
-                    print(f"  {model}: {stats['calls']} calls, {stats['tokens']} tokens, ${stats['cost']:.4f}, avg {avg_latency:.0f}ms")
-                if comparison.get("savings_vs_expensive"):
-                    print(f"  SAVINGS: ${comparison['savings_vs_expensive']:.4f} saved by using cheaper models for simple tasks")
+                for model, stats in sorted(comparison.items()):
+                    print(
+                        f"  {model}: {stats['calls']} calls, "
+                        f"{stats['total_tokens']} tokens, "
+                        f"${stats['total_cost']:.4f}, "
+                        f"avg {stats['avg_latency_ms']:.0f}ms"
+                    )
+                total = sum(s["total_cost"] for s in comparison.values())
+                print(f"  Total scan cost: ${total:.4f}")
 
         print(f"\n{'=' * 60}")
-        print(f"  SCAN COMPLETE")
+        print("  SCAN COMPLETE")
         print(f"  Findings: {len(findings)} ({critical_count} critical, {high_count} high)")
         print(f"  Cross-source correlations: {len(all_correlations)}")
         print(f"  Scan ID: {scan_id}")
@@ -273,20 +331,34 @@ class DeepSentinel:
 
         print(report)
 
+        # Post the review back onto the PR itself. Findings are only useful
+        # where the review is happening, and the CIBA gate above governs it:
+        # a scan with critical findings posts only once a human has approved.
+        posted = False
+        if pr_number and (critical_count == 0 or ciba_approved):
+            posted = await post_pr_comment(
+                owner, repo, pr_number, findings, all_correlations
+            )
+        elif pr_number:
+            print("[GitHub] Approval denied — not posting review comment")
+
         return {
             "scan_id": scan_id,
             "findings": findings,
             "correlations": all_correlations,
             "report": report,
+            "pr_comment_posted": posted,
             "stats": {"total": len(findings), "critical": critical_count, "high": high_count},
         }
 
     async def run_autonomous(self, owner: str, repo: str, poll_interval: int = 60):
         """
         AUTONOMOUS MODE: Continuously monitor for new PRs and scan them.
-        Maximum score on the Autonomy judging criterion.
+
+        Polls for pull requests that have not been scanned at their current
+        head commit and runs the full pipeline against each.
         """
-        print(f"\n[DeepSentinel] AUTONOMOUS MODE")
+        print("\n[DeepSentinel] AUTONOMOUS MODE")
         print(f"[DeepSentinel] Monitoring: {owner}/{repo}")
         print(f"[DeepSentinel] Poll interval: {poll_interval}s\n")
 

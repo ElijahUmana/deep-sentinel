@@ -14,13 +14,11 @@ Uses Aerospike's key-value + document model with TTL-based expiration.
 Falls back to in-memory dict with manual TTL tracking when Aerospike is unavailable.
 """
 import json
-import time
-import hashlib
 import os
+import time
 
 try:
     import aerospike
-    from aerospike import exception as ae_exception
 
     AEROSPIKE_AVAILABLE = True
 except ImportError:
@@ -141,7 +139,7 @@ class AerospikeCache:
         if not AEROSPIKE_AVAILABLE:
             print("[Aerospike] Package not available, using in-memory fallback")
             print(f"[Aerospike] Data model: namespace={self.namespace}")
-            print(f"[Aerospike] Sets: patterns | scan_cache (TTL 1h) | cves (TTL 24h) | sessions (TTL 2h)")
+            print("[Aerospike] Sets: patterns | scan_cache (TTL 1h) | cves (TTL 24h) | sessions (TTL 2h)")
             return
 
         try:
@@ -152,7 +150,7 @@ class AerospikeCache:
         except Exception as e:
             print(f"[Aerospike] Connection failed ({e}), using in-memory fallback")
             print(f"[Aerospike] Data model: namespace={self.namespace}")
-            print(f"[Aerospike] Sets: patterns | scan_cache (TTL 1h) | cves (TTL 24h) | sessions (TTL 2h)")
+            print("[Aerospike] Sets: patterns | scan_cache (TTL 1h) | cves (TTL 24h) | sessions (TTL 2h)")
             self.connected = False
 
     def _key(self, set_name: str, key_str: str):
@@ -220,7 +218,7 @@ class AerospikeCache:
         print(f"[Aerospike] Batch-loaded {len(records)} vulnerability patterns into set 'patterns' ({total_ms:.1f}ms)")
         print(f"[Aerospike]   Batch write: {len(records)} records in {batch_elapsed_us:.0f}us ({avg_per_record_us:.0f}us/record)")
         print(f"[Aerospike]   Key format: ({self.namespace}, patterns, <pattern_id>)")
-        print(f"[Aerospike]   Bins: pattern_id, regex, cwe_id, severity, description, language, hit_count")
+        print("[Aerospike]   Bins: pattern_id, regex, cwe_id, severity, description, language, hit_count")
         print(f"[Aerospike]   Secondary indexes: severity ({len(self._severity_index)} groups), cwe_id ({len(self._cwe_index)} groups)")
 
     def get_patterns(self) -> list[dict]:
@@ -419,7 +417,7 @@ class AerospikeCache:
         mode = "Aerospike cluster" if self.connected else "In-memory fallback (same data model)"
         print(f"  [Aerospike Data Model] Mode: {mode}")
         print(f"  [Aerospike Data Model] Namespace: {self.namespace}")
-        print(f"  [Aerospike Data Model] Sets:")
+        print("  [Aerospike Data Model] Sets:")
         print(f"    'patterns'   -> {len(VULNERABILITY_PATTERNS)} records | Bins: pattern_id, regex, cwe_id, severity, description")
         scan_count = sum(1 for k in self._memory_cache if k.startswith("scan:"))
         session_count = sum(1 for k in self._memory_cache if k.startswith("session:"))
@@ -708,7 +706,7 @@ class AerospikeCache:
         return 0
 
     def demonstrate_ttl(self, label: str = "demo"):
-        """Demonstrate TTL-based expiration for judges."""
+        """Exercise TTL-based expiration end to end."""
         # Write a key with a very short TTL
         short_key = f"ttl-demo-{label}"
         self.cache_scan_result("ttl-test/repo", 0, short_key, {"demo": True}, ttl=2)

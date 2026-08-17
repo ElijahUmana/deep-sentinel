@@ -1,0 +1,27 @@
+# Local Aerospike for the pattern cache.
+#
+# Without this, AerospikeCache falls back to an in-process dict — the data
+# model is identical, but secondary-index queries, server-side TTL expiry and
+# atomic counter increments are simulated rather than performed. Bring this up
+# and the cache exercises the real engine.
+#
+#   docker compose up -d
+#   AEROSPIKE_HOST=127.0.0.1 AEROSPIKE_PORT=3000 python scan.py <owner> <repo> --pr 1
+
+services:
+  aerospike:
+    image: aerospike/aerospike-server:7.1.0.0
+    container_name: deepsentinel-aerospike
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+      - "3002:3002"
+    environment:
+      # Namespace the cache writes to; must match NAMESPACE in
+      # src/storage/aerospike_cache.py
+      NAMESPACE: test
+    healthcheck:
+      test: ["CMD", "asinfo", "-v", "status"]
+      interval: 5s
+      timeout: 3s
+      retries: 12

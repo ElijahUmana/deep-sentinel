@@ -3,8 +3,8 @@ Core security analysis engine for DeepSentinel.
 Uses TrueFoundry for multi-model analysis, Overmind for prompt optimization.
 """
 import json
-import re
 import os
+import re
 
 # Overmind instrumentation
 try:
@@ -15,7 +15,7 @@ except ImportError:
     OVERMIND_AVAILABLE = False
 
 from src.llm.truefoundry_gateway import TrueFoundryGateway
-from src.storage.aerospike_cache import AerospikeCache, VULNERABILITY_PATTERNS
+from src.storage.aerospike_cache import AerospikeCache
 
 
 def init_overmind():
@@ -173,8 +173,11 @@ Return verified findings as JSON array. Add 'verified': true for real issues. Re
                     correlations=json.dumps(context.get("correlations", [])[:5], indent=2),
                 )
 
+                # Deep verification runs on the stronger model. The fast
+                # per-file pass above uses gpt-4o-mini; this is the second tier
+                # of the multi-model split, so it routes to Claude Sonnet 4.
                 result = self.llm.chat(
-                    model="gpt-4o",
+                    model="claude-sonnet-4-20250514",
                     messages=[
                         {"role": "system", "content": "You are an expert security analyst. Output ONLY valid JSON."},
                         {"role": "user", "content": verify_prompt},
@@ -207,12 +210,13 @@ Return verified findings as JSON array. Add 'verified': true for real issues. Re
         cross_source_findings = [f for f in deduped if f.get("slack_context") or f.get("macroscope_context")]
         total_time = (time.time() - t0) * 1000
 
-        print(f"\n[Analyzer] === ANALYSIS METRICS ===")
+        print("\n[Analyzer] === ANALYSIS METRICS ===")
         print(f"  Step 1 (Aerospike patterns): {code_only_count} findings in {regex_time:.1f}ms")
         print(f"  Step 2 (TrueFoundry LLM):    +{llm_count} findings in {llm_time:.0f}ms")
         print(f"  Step 3 (Deep verification):   {verify_time:.0f}ms")
         print(f"  Total: {len(deduped)} unique findings in {total_time:.0f}ms")
-        print(f"  Cross-source enriched: {len(context.get('correlations', []))} correlations")
+        print(f"  Cross-source enriched: {len(cross_source_findings)} findings, "
+              f"{len(context.get('correlations', []))} correlations")
         if code_only_count > 0:
             improvement = ((len(deduped) - code_only_count) / code_only_count) * 100
             print(f"  VALUE ADD: Code-only scan found {code_only_count}. With LLM + cross-source: {len(deduped)} (+{improvement:.0f}%)")

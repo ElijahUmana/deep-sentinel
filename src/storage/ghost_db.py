@@ -6,7 +6,6 @@ audit trails, and cross-source correlations.
 import json
 import os
 import subprocess
-from datetime import datetime
 
 
 class GhostDB:
@@ -162,7 +161,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
                     to_str(correlation.get("risk_note", "")),
                     correlation.get("risk_score") if isinstance(correlation.get("risk_score"), (int, float)) else None,
                 )
-        except Exception as e:
+        except Exception:
             pass  # Don't crash on correlation storage errors
 
     async def log_audit(self, action: str, resource_type: str = None,

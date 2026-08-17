@@ -10,9 +10,10 @@ Uses the official auth0-ai Python SDK and openfga-sdk for all operations.
 """
 import asyncio
 import os
+import sys
 import time
-import httpx
 
+import httpx
 from auth0_ai.authorizers.fga_authorizer import FGAAuthorizer, FGAAuthorizerParams
 from openfga_sdk.client import ClientCheckRequest
 
@@ -209,6 +210,41 @@ class Auth0Client:
         cleaned = _re.sub(r"[^a-zA-Z0-9\s+\-_.,:#]", "", msg)
         return cleaned[:64]
 
+    def _local_approval(self, action: str, resource: str) -> bool:
+        """Ask for approval on the terminal when CIBA is unavailable.
+
+        Three outcomes, in priority order:
+          - DEEPSENTINEL_AUTO_APPROVE=1 → approve without prompting. Explicit
+            opt-in for CI and unattended runs, and it announces itself.
+          - interactive TTY → prompt the operator.
+          - non-interactive → deny. A security tool that cannot obtain
+            approval must not proceed with a write action on the assumption
+            that someone would have said yes.
+        """
+        print(f"[Approval] Requesting approval: {action} on {resource}")
+
+        if os.environ.get("DEEPSENTINEL_AUTO_APPROVE") == "1":
+            print("[Approval] Auto-approved via DEEPSENTINEL_AUTO_APPROVE=1")
+            return True
+
+        if not (sys.stdin and sys.stdin.isatty()):
+            print(
+                "[Approval] DENIED — no CIBA session and no terminal to prompt. "
+                "Configure Auth0 or set DEEPSENTINEL_AUTO_APPROVE=1 to allow "
+                "unattended write actions."
+            )
+            return False
+
+        try:
+            answer = input("[Approval] Approve this action? [y/N]: ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("\n[Approval] DENIED — no response")
+            return False
+
+        approved = answer in ("y", "yes")
+        print(f"[Approval] {'APPROVED' if approved else 'DENIED'} by operator")
+        return approved
+
     async def request_approval(self, action: str, resource: str, timeout: int = 300) -> bool:
         """
         Request human approval for a sensitive action via CIBA.
@@ -217,12 +253,12 @@ class Auth0Client:
         Use for: creating CRITICAL security tickets, auto-fixing code,
         revoking access tokens, modifying security configurations.
         """
-        if not self.connected or not self.user_id or (self.user_id and (self.user_id.startswith("demo|") or self.user_id.startswith("auth0|device"))):
-            print(f"[Auth0 CIBA] Requesting approval: {action} on {resource}")
-            print(f"[Auth0 CIBA] In production: push notification sent to user's device")
-            print(f"[Auth0 CIBA] User reviews action and approves/denies on their phone")
-            print(f"[Auth0 CIBA] Approval received")
-            return True
+        # Without a CIBA-capable Auth0 session there is no device to push to,
+        # so approval falls back to the terminal. It is still a human decision —
+        # what it must never be is an automatic yes, which is what this branch
+        # used to return regardless of configuration.
+        if not self.connected or not self.user_id or self.user_id.startswith("demo|"):
+            return self._local_approval(action, resource)
 
         import json as _json
 
@@ -344,9 +380,18 @@ class Auth0Client:
             print(f"[Auth0 FGA] Authorization check: {user} {relation} {fga_object} -> {status}")
             return allowed
         except Exception as e:
-            # FGA service unavailable — fail open with warning (configure FGA_STORE_ID for enforcement)
-            print(f"[Auth0 FGA] Check failed ({e}), defaulting to ALLOWED")
-            return True
+            # An authorization service that cannot be reached must not be read
+            # as permission. Reads degrade open so a scan can still run; writes
+            # fail closed, because silently granting write on an outage is the
+            # failure mode this check exists to prevent.
+            write_relation = relation not in ("viewer", "reader", "can_read", "can_view")
+            decision = not write_relation
+            print(
+                f"[Auth0 FGA] Check failed ({e}) — "
+                f"{'DENIED' if write_relation else 'ALLOWED'} "
+                f"({'write' if write_relation else 'read'} relation '{relation}')"
+            )
+            return decision
 
     async def fga_check_repo_findings(self, user_id: str, owner: str, repo: str) -> bool:
         """

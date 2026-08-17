@@ -4,7 +4,7 @@ SARIF is the industry standard format for security analysis results.
 Supports integration with GitHub Security, Azure DevOps, and other tools.
 """
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def generate_sarif(findings: list, correlations: list, scan_metadata: dict) -> dict:
@@ -92,8 +92,8 @@ def generate_sarif(findings: list, correlations: list, scan_metadata: dict) -> d
                 "invocations": [
                     {
                         "executionSuccessful": True,
-                        "startTimeUtc": scan_metadata.get("start_time", datetime.now(timezone.utc).isoformat()),
-                        "endTimeUtc": scan_metadata.get("end_time", datetime.now(timezone.utc).isoformat()),
+                        "startTimeUtc": scan_metadata.get("start_time", datetime.now(UTC).isoformat()),
+                        "endTimeUtc": scan_metadata.get("end_time", datetime.now(UTC).isoformat()),
                         "properties": {
                             "scan_id": scan_metadata.get("scan_id", ""),
                             "repository": scan_metadata.get("repository", ""),

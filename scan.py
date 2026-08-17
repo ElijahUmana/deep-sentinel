@@ -12,15 +12,15 @@ Examples:
     python scan.py ElijahUmana demo-vulnerable-app --pr 1
     python scan.py OWASP juice-shop
 """
-import asyncio
 import argparse
-import os
-import sys
+import asyncio
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from src.analysis.security_analyzer import init_overmind
+
 init_overmind()
 
 from src.main import DeepSentinel

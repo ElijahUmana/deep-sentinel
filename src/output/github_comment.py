@@ -4,6 +4,7 @@ Posts security findings directly as PR comments — actionable where developers 
 This is what makes DeepSentinel immediately useful: findings appear IN the PR, not in a dashboard.
 """
 import os
+
 import httpx
 
 

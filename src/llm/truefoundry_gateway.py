@@ -18,7 +18,6 @@ import time
 
 import anthropic
 
-
 # Cost per 1M tokens for cost comparison metrics
 MODEL_COSTS = {
     "gpt-4o-mini": {"input": 0.15, "output": 0.60},
@@ -30,6 +29,9 @@ MODEL_COSTS = {
 FALLBACK_CHAINS = {
     "gpt-4o-mini": ["gpt-4o-mini", "gpt-4o"],
     "gpt-4o": ["gpt-4o", "gpt-4o-mini"],
+    # Deep verification degrades to gpt-4o rather than dropping to the fast
+    # model, so a provider outage costs accuracy rather than the whole tier.
+    "claude-sonnet-4-20250514": ["claude-sonnet-4-20250514", "gpt-4o"],
 }
 
 
@@ -265,7 +267,7 @@ class TrueFoundryGateway:
         total_cost = getattr(self, "total_cost", 0)
         total_calls = getattr(self, "total_calls", 0)
 
-        print(f"\n  [TrueFoundry Cost Summary]")
+        print("\n  [TrueFoundry Cost Summary]")
         print(f"    Total: {total_calls} calls, ${total_cost:.4f}")
         for model, stats in comparison.items():
             print(
@@ -315,7 +317,7 @@ class TrueFoundryGateway:
             else:
                 model_tasks[base] = "general"
 
-        print(f"\n  MODEL COMPARISON (via TrueFoundry Gateway):")
+        print("\n  MODEL COMPARISON (via TrueFoundry Gateway):")
         print(f"  {'':>2}{'Model':<25} {'Calls':>5} {'Tokens':>8} {'Cost':>9} {'Avg Latency':>12}   Used for")
         print(f"  {'-'*90}")
 
@@ -350,4 +352,4 @@ class TrueFoundryGateway:
             savings_pct = (1 - total_cost / all_expensive_cost) * 100
             print(f"\n  SAVINGS: Using {most_expensive_name} for everything would cost ${all_expensive_cost:.4f}")
             print(f"  Multi-model routing saved ${savings:.4f} ({savings_pct:.0f}% reduction)")
-            print(f"  Strategy: lightweight models for scanning, powerful models only for verification")
+            print("  Strategy: lightweight models for scanning, powerful models only for verification")

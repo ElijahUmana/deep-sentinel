@@ -1,0 +1,25 @@
+[tool.ruff]
+target-version = "py313"
+line-length = 120
+
+[tool.ruff.lint]
+# Pinned explicitly rather than relying on ruff's defaults, so a toolchain
+# upgrade cannot turn CI red without a deliberate change here.
+select = ["E", "F", "I", "UP", "W"]
+ignore = [
+    "E501",  # line length is a formatter concern, not a lint failure
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Import order in these two is load-bearing, not sloppiness. load_dotenv() has
+# to run before modules that read configuration at import time, and Overmind's
+# OpenTelemetry instrumentation has to patch the LLM clients before they are
+# imported — moving these imports to the top silently disables tracing.
+"scan.py" = ["E402"]
+"src/main.py" = ["E402"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: requires live credentials and network access",
+]

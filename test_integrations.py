@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 """
 DeepSentinel Integration Verification
-Verifies ALL 7 sponsor tool integrations are operational.
-Run this before demos to confirm everything works.
+Verifies all seven integrations are operational against live services.
 """
 import asyncio
 import os
 import sys
-import time
-import json
 
 sys.path.insert(0, ".")
+import pytest
 from dotenv import load_dotenv
+
+# Drives all seven live third-party services; needs real credentials and
+# network access, so it is excluded from the default offline run.
+pytestmark = pytest.mark.integration
+
 load_dotenv()
 
 
@@ -24,8 +27,9 @@ async def test_all():
     # 1. AUTH0 — All 4 Pillars
     print("[1/7] Auth0 (4 pillars)...")
     try:
-        from src.auth.auth0_client import Auth0Client
         import httpx
+
+        from src.auth.auth0_client import Auth0Client
         auth = Auth0Client()
         pillars = []
         if auth.connected:

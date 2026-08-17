@@ -12,9 +12,10 @@ import time
 from dataclasses import dataclass, field
 
 import httpx
-
 from airbyte_agent_github import GithubConnector
 from airbyte_agent_github.models import GithubPersonalAccessTokenAuthConfig
+from airbyte_agent_jira import JiraConnector
+from airbyte_agent_jira.models import JiraAuthConfig
 from airbyte_agent_slack import SlackConnector
 from airbyte_agent_slack.models import SlackTokenAuthenticationAuthConfig
 
@@ -28,13 +29,19 @@ class PRData:
     changed_files: list = field(default_factory=list)
     commits: list = field(default_factory=list)
     labels: list = field(default_factory=list)
+    # Head commit of the PR. Used as the scan cache key so a re-scan of an
+    # unchanged PR is a hit; without it the cache can never be exercised.
+    head_sha: str = ""
 
 
 @dataclass
 class GitHubIssueContext:
-    """Security-relevant GitHub issues and PR review comments."""
+    """Security-relevant tracker context: GitHub issues, PR review comments,
+    and Jira tickets. Jira tickets are normalized into the same shape as
+    GitHub issues so the correlation engine treats them identically."""
     issues: list = field(default_factory=list)
     pr_comments: list = field(default_factory=list)
+    jira_tickets: list = field(default_factory=list)
 
 
 @dataclass
@@ -61,6 +68,17 @@ class CrossSourceContext:
     correlations: list = field(default_factory=list)
     enrichment_metrics: dict = field(default_factory=dict)
 
+
+# Source files worth scanning during a repository-wide walk, and directories
+# that never contain first-party code.
+SOURCE_EXTENSIONS = (
+    ".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rb", ".java", ".php",
+    ".cs", ".rs", ".sh", ".sql",
+)
+SKIP_DIRS = {
+    "node_modules", "venv", ".venv", "dist", "build", "vendor", "target",
+    "__pycache__", "site-packages", "migrations", "fixtures", "testdata",
+}
 
 SECURITY_KEYWORDS = [
     "vulnerability", "security", "CVE", "XSS", "SQL injection",
@@ -138,6 +156,7 @@ class AirbyteDataLayer:
 
         self.github = None
         self.slack = None
+        self.jira = None
 
         # Entity-level cache: avoids redundant connector calls for the same data
         self._entity_cache: dict[str, tuple[float, any]] = {}
@@ -158,6 +177,23 @@ class AirbyteDataLayer:
                 auth_config=SlackTokenAuthenticationAuthConfig(api_token=self.slack_token)
             )
             print("[Airbyte] Slack connector initialized")
+
+        # Jira: the third agent connector. Security work is frequently tracked
+        # here rather than in GitHub Issues, and a ticket that has sat open for
+        # months is exactly the deferral signal this tool is built to surface.
+        self.jira_project = os.environ.get("JIRA_PROJECT_KEY", "")
+        jira_subdomain = os.environ.get("JIRA_SUBDOMAIN", "")
+        jira_email = os.environ.get("JIRA_EMAIL", "")
+        jira_token = os.environ.get("JIRA_API_TOKEN", "")
+        if jira_subdomain and jira_email and jira_token:
+            try:
+                self.jira = JiraConnector(
+                    auth_config=JiraAuthConfig(username=jira_email, password=jira_token),
+                    subdomain=jira_subdomain,
+                )
+                print("[Airbyte] Jira connector initialized")
+            except Exception as e:
+                print(f"[Airbyte] Jira connector init error: {e}")
 
     # ===========================
     # ENTITY CACHE
@@ -180,18 +216,27 @@ class AirbyteDataLayer:
     def _set_cached(self, key: str, data):
         self._entity_cache[key] = (time.time(), data)
 
-    async def _github_execute(self, entity: str, action: str, params: dict):
-        """Execute a GitHub connector call with entity caching."""
-        if not self.github:
+    async def _execute_cached(self, connector, entity: str, action: str, params: dict):
+        """Execute any Airbyte connector call with entity-level caching.
+
+        The cache key is namespaced by connector so the same entity name on
+        two different sources cannot collide.
+        """
+        if connector is None:
             return None
-        key = self._cache_key(entity, action, params)
+        namespace = type(connector).__name__
+        key = self._cache_key(f"{namespace}:{entity}", action, params)
         cached = self._get_cached(key)
         if cached is not None:
             return cached
-        result = await self.github.execute(entity, action, params)
+        result = await connector.execute(entity, action, params)
         data = result.data if hasattr(result, "data") else result
         self._set_cached(key, data)
         return data
+
+    async def _github_execute(self, entity: str, action: str, params: dict):
+        """Execute a GitHub connector call with entity caching."""
+        return await self._execute_cached(self.github, entity, action, params)
 
     # ===========================
     # GITHUB DATA (via Airbyte connector)
@@ -239,11 +284,15 @@ class AirbyteDataLayer:
 
         # Determine head ref for file content lookups
         head_ref = "main"
+        head_sha = ""
         head = pr.get("headRefName", pr.get("head", {}))
         if isinstance(head, str):
             head_ref = head
         elif isinstance(head, dict):
             head_ref = head.get("ref", "main")
+            head_sha = head.get("sha", "") or ""
+        # GraphQL-shaped payloads expose the oid directly
+        head_sha = head_sha or pr.get("headRefOid", "") or ""
 
         # Step 2: Get changed file paths via REST (no connector entity for PR diffs)
         pr_files = await self._github_api_pr_files(owner, repo, pr_number)
@@ -263,6 +312,7 @@ class AirbyteDataLayer:
             changed_files=changed_files,
             commits=[],
             labels=label_names,
+            head_sha=head_sha,
         )
 
     async def get_repo_files(self, owner: str, repo: str, path: str = "") -> list:
@@ -272,6 +322,57 @@ class AirbyteDataLayer:
             {"owner": owner, "repo": repo, "path": path or "."},
         )
         return data or []
+
+    async def get_repo_snapshot(
+        self, owner: str, repo: str, max_files: int = 25, max_depth: int = 4
+    ) -> PRData:
+        """Walk a repository's source tree and return it shaped as PRData.
+
+        Repository-wide scanning (`scan.py owner repo` with no --pr) needs the
+        same shape the PR path produces, so the analysis, correlation and
+        scoring stages downstream are identical. Bounded by file count and
+        depth because every file costs a connector round trip and an LLM pass.
+        """
+        print(f"[Airbyte] No PR specified — walking {owner}/{repo} source tree")
+
+        collected: list[dict] = []
+        seen_dirs: set[str] = set()
+
+        async def walk(path: str, depth: int) -> None:
+            if depth > max_depth or len(collected) >= max_files or path in seen_dirs:
+                return
+            seen_dirs.add(path)
+
+            for entry in await self.get_repo_files(owner, repo, path):
+                if len(collected) >= max_files:
+                    return
+                if not isinstance(entry, dict):
+                    continue
+
+                name = entry.get("name", "") or entry.get("path", "").rsplit("/", 1)[-1]
+                entry_path = entry.get("path", f"{path}/{name}".lstrip("/"))
+                entry_type = (entry.get("type") or "").lower()
+
+                if entry_type in ("dir", "directory", "tree"):
+                    if name not in SKIP_DIRS and not name.startswith("."):
+                        await walk(entry_path, depth + 1)
+                elif any(entry_path.endswith(ext) for ext in SOURCE_EXTENSIONS):
+                    content = await self.get_file_content(owner, repo, entry_path)
+                    if content:
+                        collected.append(
+                            {"path": entry_path, "content": content, "patch": ""}
+                        )
+
+        await walk("", 0)
+        print(f"[Airbyte] Repo snapshot: {len(collected)} source files collected")
+
+        return PRData(
+            number=0,
+            title=f"Full repository scan: {owner}/{repo}",
+            author=owner,
+            body=f"Repository-wide security scan of {owner}/{repo}",
+            changed_files=collected,
+        )
 
     async def get_file_content(self, owner: str, repo: str, path: str) -> str:
         """Get raw file content via Airbyte connector (file_content entity)."""
@@ -359,7 +460,7 @@ class AirbyteDataLayer:
                 for issue in data:
                     title = issue.get("title", "") if isinstance(issue, dict) else ""
                     body = issue.get("body", "") if isinstance(issue, dict) else ""
-                    labels = [l.get("name", "") if isinstance(l, dict) else str(l) for l in (issue.get("labels", []) if isinstance(issue, dict) else [])]
+                    labels = [lb.get("name", "") if isinstance(lb, dict) else str(lb) for lb in (issue.get("labels", []) if isinstance(issue, dict) else [])]
 
                     # Filter for security-relevant issues
                     text = f"{title} {body}".lower()
@@ -391,7 +492,7 @@ class AirbyteDataLayer:
                             title = issue.get("title", "")
                             body = issue.get("body", "") or ""
                             text = f"{title} {body}".lower()
-                            labels = [l.get("name", "") for l in issue.get("labels", [])]
+                            labels = [lb.get("name", "") for lb in issue.get("labels", [])]
 
                             if any(kw in text for kw in SECURITY_KEYWORDS) or "security" in " ".join(labels).lower():
                                 issues.append({
@@ -508,7 +609,10 @@ class AirbyteDataLayer:
         """
         issues_task = self.get_security_issues(owner, repo)
         comments_task = self.get_pr_comments(owner, repo, pr_number)
-        issues, comments = await asyncio.gather(issues_task, comments_task, return_exceptions=True)
+        jira_task = self.get_security_tickets()
+        issues, comments, jira_tickets = await asyncio.gather(
+            issues_task, comments_task, jira_task, return_exceptions=True
+        )
 
         if isinstance(issues, Exception):
             print(f"[Airbyte] GitHub issues error: {issues}")
@@ -516,8 +620,70 @@ class AirbyteDataLayer:
         if isinstance(comments, Exception):
             print(f"[Airbyte] PR comments error: {comments}")
             comments = []
+        if isinstance(jira_tickets, Exception):
+            print(f"[Airbyte] Jira error: {jira_tickets}")
+            jira_tickets = []
 
-        return GitHubIssueContext(issues=issues, pr_comments=comments)
+        # Jira tickets are already normalized to the GitHub issue shape, so
+        # correlation and LLM context treat all tracker sources uniformly.
+        return GitHubIssueContext(
+            issues=issues + jira_tickets,
+            pr_comments=comments,
+            jira_tickets=jira_tickets,
+        )
+
+    async def get_security_tickets(self) -> list:
+        """Fetch security-relevant Jira tickets via the Airbyte Jira connector.
+
+        Returns tickets normalized into the GitHub issue shape
+        (`number`/`title`/`body`/`state`/`url`) so downstream correlation does
+        not need to know which tracker a item came from.
+
+        Jira requires a *bounded* JQL query — an unbounded one is rejected with
+        a 400 — so a project key is mandatory.
+        """
+        if not self.jira or not self.jira_project:
+            return []
+
+        terms = " OR ".join(
+            f'text ~ "{kw}"'
+            for kw in ("security", "vulnerability", "auth", "injection", "credential")
+        )
+        jql = (
+            f"project = {self.jira_project} AND ({terms}) "
+            f"AND statusCategory != Done ORDER BY created DESC"
+        )
+
+        try:
+            data = await self._execute_cached(
+                self.jira, "issues", "api_search",
+                {"jql": jql, "maxResults": 25, "fields": "summary,description,status,created"},
+            )
+        except Exception as e:
+            print(f"[Airbyte] Jira search failed: {e}")
+            return []
+
+        raw = data.get("issues", []) if isinstance(data, dict) else (data or [])
+
+        tickets = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            fields = item.get("fields", {}) if isinstance(item.get("fields"), dict) else {}
+            key = item.get("key", "")
+            status = fields.get("status", {})
+            tickets.append({
+                "number": key,
+                "title": fields.get("summary", "") or "",
+                "body": str(fields.get("description", "") or "")[:1000],
+                "state": (status.get("name", "open") if isinstance(status, dict) else "open"),
+                "created_at": fields.get("created", ""),
+                "url": f"https://{os.environ.get('JIRA_SUBDOMAIN', '')}.atlassian.net/browse/{key}",
+                "source": "jira",
+            })
+
+        print(f"[Airbyte] Jira: {len(tickets)} open security tickets in {self.jira_project}")
+        return tickets
 
     def correlate_issues_with_code(self, changed_files: list, issue_ctx: GitHubIssueContext, pr_number: int) -> list:
         """Build cross-source correlations from real GitHub issues and PR comments.
@@ -630,8 +796,14 @@ class AirbyteDataLayer:
         """
         print("[Airbyte] Gathering cross-source context...")
 
-        # Parallel data fetch from multiple Airbyte connectors
-        github_task = self.get_pr_details(owner, repo, pr_number)
+        # Parallel data fetch from multiple Airbyte connectors. pr_number 0
+        # means "no PR" — scan the repository's source tree instead, which is
+        # what the CLI does when --pr is omitted.
+        github_task = (
+            self.get_pr_details(owner, repo, pr_number)
+            if pr_number
+            else self.get_repo_snapshot(owner, repo)
+        )
         slack_task = self.get_security_discussions()
 
         github_data, slack_data = await asyncio.gather(github_task, slack_task, return_exceptions=True)
@@ -1052,11 +1224,11 @@ class AirbyteDataLayer:
         linked = metrics.get("cross_source_linked", 0)
         total = metrics.get("total_signals", 0)
 
-        print(f"\n  [Multi-Source Value]")
+        print("\n  [Multi-Source Value]")
         print(f"    Code alone:           {code} signals")
         print(f"    + Issues/Comments:    {context_signals} additional signals")
         print(f"    + Cross-source links: {linked} correlated risks")
-        print(f"    ----------------------------------------")
+        print("    ----------------------------------------")
         print(f"    Total intelligence:   {total} signals ({metrics.get('sources_used', 0)} sources)")
         if code > 0:
             uplift = ((total - code) / code * 100) if code else 0

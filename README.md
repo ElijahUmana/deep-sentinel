@@ -79,23 +79,23 @@ GitHub PR+Issues    Slack Msgs          Codebase
          (patterns)   (history)  (PR comment + SARIF)
 ```
 
-## Sponsor Tool Integration (7/7 Verified)
+## Integrations
 
-All 7 integrations are **verified working** with real credentials and real data. Run `python test_integrations.py` to confirm.
+Each integration is exercised against real credentials and real data. `python test_integrations.py` verifies all of them end to end.
 
-| Tool | Integration Depth | Verified Evidence |
+| Component | What it does here | Detail |
 |------|------------------|-------------------|
-| **Auth0** | All 4 agentic pillars: Device Flow authentication, Token Vault for zero-standing-privilege API access, CIBA push notification for human-in-the-loop approval, FGA gatekeeping (read allowed, write denied → CIBA escalation) | Tenant `dev-cv0k6l2rcy152z4j`, native app for device flow, confidential app for CIBA/Token Vault |
+| **Auth0** | All 4 agentic pillars: Device Flow authentication, Token Vault for zero-standing-privilege API access, CIBA push notification for human-in-the-loop approval, FGA gatekeeping (read allowed, write denied → CIBA escalation) | Split-app architecture: a native app for the device code grant (public client) and a confidential app for CIBA and Token Vault, which Auth0 requires as separate applications |
 | **Airbyte** | 3 agent connectors: GitHub (PRs, Issues, file content, commits), Slack (channels, messages from #security-review + #engineering), Jira (installed, ready for workspace). Entity caching, enrichment metrics, 3-strategy correlation engine | Real PR data, 27+ real Slack messages, GitHub Issues #2/#3 |
-| **Macroscope** | Webhook API with trigger-poll lifecycle, custom security rules (`macroscope.md`), architecture-aware severity scoring, codebase intelligence queries | Live webhook at hooks.macroscope.com, workspace 121345656 |
-| **Ghost** | Persistent Postgres with 1,069+ findings, schema introspection (agent reads its own schema), historical trend analysis, database forking for safe experiments, dynamic SQL construction | DB `uipdk8byh3` on TimescaleDB cloud, 28 forks created |
+| **Macroscope** | Webhook API with trigger-poll lifecycle, custom security rules (`macroscope.md`), architecture-aware severity scoring, codebase intelligence queries | Live webhook at hooks.macroscope.com with the full trigger-poll lifecycle |
+| **Ghost** | Persistent Postgres with 1,069+ findings, schema introspection (agent reads its own schema), historical trend analysis, database forking for safe experiments, dynamic SQL construction | Postgres on TimescaleDB cloud, with database forking for safe experiments |
 | **TrueFoundry** | AI Gateway with multi-model routing (GPT-4o-mini for fast scan, Claude Sonnet 4 for deep verification), automatic fallback chains, per-model cost/latency tracking, metadata tagging for observability | gateway.truefoundry.ai, $0.003 per full scan |
 | **Aerospike** | 10 CWE-mapped vulnerability patterns with batch loading, secondary index queries (by severity, by CWE), TTL-based expiration, session state management, atomic increment for hit counting | In-memory mode with full Aerospike data model (namespace/set/bin) |
 | **Overmind** | OverClaw CLI agent optimization: 12 baseline traces, 15 test cases, 5 optimization iterations, score improved from 39.7 to 56.2 (+42%). Policy-driven evaluation with security-specific criteria | `.overclaw/agents/deepsentinel/experiments/results.tsv` |
 
-## Cross-Source Intelligence — ALL REAL DATA
+## Cross-Source Intelligence
 
-Every cross-source correlation traces back to verifiable data:
+Every correlation traces back to a verifiable source:
 
 | Source | Data | Verification |
 |--------|------|-------------|
@@ -105,7 +105,7 @@ Every cross-source correlation traces back to verifiable data:
 | PR Comments | Security review flagging os.system() and SQL injection | [View on PR #1](https://github.com/ElijahUmana/demo-vulnerable-app/pull/1) |
 | Slack #engineering | "Skip input validation for MVP", "DB password hardcoded", "MD5 hashing needs bcrypt" | 16 messages via Airbyte Slack connector |
 | Slack #security-review | "SQL injection confirmed", "Refund endpoint exploitable", "PCI DSS non-compliant" | 12 messages via Airbyte Slack connector |
-| Ghost DB | 1,069+ findings across all scans, 200+ correlations | `ghost sql uipdk8byh3 "SELECT COUNT(*) FROM vulnerabilities"` |
+| Ghost DB | 1,069+ findings across all scans, 200+ correlations | `ghost sql <db-id> "SELECT COUNT(*) FROM vulnerabilities"` |
 
 ## What Existing Tools Miss
 
@@ -137,11 +137,17 @@ DeepSentinel finds those same 4 PLUS:
 git clone https://github.com/ElijahUmana/deep-sentinel
 cd deep-sentinel
 
+# Python 3.13+ required — the Airbyte agent connectors publish wheels for 3.13 and up
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 
 cp .env.example .env
-# Add your API keys (Auth0, GitHub, Slack, TrueFoundry, Ghost, Macroscope, Overmind)
+# Add your API keys (Auth0, GitHub, Slack, Jira, TrueFoundry, Ghost, Macroscope, Overmind)
+
+# Optional: run Aerospike locally so the pattern cache uses the real engine
+# (secondary indexes, server-side TTL, atomic counters) instead of the
+# in-memory fallback
+docker compose up -d
 
 # Scan a specific PR
 python scan.py ElijahUmana demo-vulnerable-app --pr 1
@@ -155,9 +161,21 @@ python scan.py ElijahUmana demo-vulnerable-app --autonomous
 # Generate SARIF output (GitHub Security compatible)
 python scan.py ElijahUmana demo-vulnerable-app --sarif
 
-# Run integration verification
+# Run integration verification (requires live credentials)
 python test_integrations.py
+
+# Offline checks — no credentials, no network
+ruff check src scan.py tests
+pytest
 ```
+
+### Approval gate
+
+Write actions — posting a review back onto a PR — are gated on human approval.
+With Auth0 configured, `scan.py` authenticates via device flow and approval is
+a CIBA push notification. Without it, approval falls back to a terminal prompt.
+In a non-interactive session the action is **denied** unless you opt in with
+`DEEPSENTINEL_AUTO_APPROVE=1`.
 
 ## Output Formats
 
@@ -181,12 +199,11 @@ python test_integrations.py
 | CWE-400 | Missing rate limiting | LLM + architecture context |
 | CWE-209 | Error information exposure | LLM analysis |
 
-## Project Stats
+## By the numbers
 
-- **51 commits** during hackathon
 - **7,029 lines** of Python
 - **44 Python files** across 8 modules
-- **7/7 integrations** verified passing
+- **7 integrations** verified passing
 - **1,069+ findings** persisted in Ghost DB
 - **27+ real Slack messages** across 3 channels
 - **$0.003** average cost per full scan via TrueFoundry
